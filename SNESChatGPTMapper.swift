@@ -36,6 +36,8 @@ private final class Mapper {
     private var heldButtons: Set<UInt32> = []
     private var lastActionTimes: [Action: Date] = [:]
     private let actionCooldown: TimeInterval = 0.18
+    private var isEnabled = true
+    private let lockToggleButtonUsage: UInt32 = 16
     private var visibleChatSlot = 2
     private let visibleChatSlotKeyCodes: [Int: CGKeyCode] = [
         1: 18,
@@ -50,7 +52,7 @@ private final class Mapper {
     ]
 
     // Calibrated on this macOS host:
-    // B=1, A=2, X/Y=3/4, L=5, R=6, Select=9, Start=10.
+    // B=1, A=2, X/Y=3/4, L=5, R=6, ZL=7, Select=9, Start=10, ZR=16.
     private let buttonActions: [UInt32: Action] = [
         1: .send,            // B
         3: .toggleVoiceChat, // X / Y
@@ -115,6 +117,7 @@ private final class Mapper {
             print("Start/Select: focus ChatGPT")
             print("X/Y: start/stop Voice Chat")
             print("L/R: toggle Voice Chat microphone shortcut (^⌥⌘M)")
+            print("ZR: lock/unlock mapper")
             print("D-pad Up/Down: visible chat slots 1-9")
             print("D-pad Left/Right: unused")
             print("A: hold ChatGPT dictation shortcut")
@@ -164,6 +167,10 @@ private final class Mapper {
                 if mode == .monitor {
                     print("button usage=\(usage) \(isPressed ? "down" : "up")")
                     fflush(stdout)
+                } else if isPressed, usage == lockToggleButtonUsage {
+                    toggleEnabled()
+                } else if !isEnabled {
+                    return
                 } else if let stroke = heldButtonStrokes[usage] {
                     if isPressed {
                         beginHold(button: usage, stroke: stroke)
@@ -187,6 +194,7 @@ private final class Mapper {
         let value = Int(rawValue)
         guard value != lastHatValue else { return }
         lastHatValue = value
+        guard isEnabled else { return }
 
         switch value {
         case 0:
@@ -255,6 +263,30 @@ private final class Mapper {
         postKeyUp(stroke)
     }
 
+    private func toggleEnabled() {
+        isEnabled.toggle()
+        if !isEnabled {
+            releaseHeldButtons()
+        }
+        playStatusSound(enabled: isEnabled)
+        print(isEnabled ? "Mapper unlocked." : "Mapper locked.")
+        fflush(stdout)
+    }
+
+    private func releaseHeldButtons() {
+        for button in heldButtons {
+            if let stroke = heldButtonStrokes[button] {
+                postKeyUp(stroke)
+            }
+        }
+        heldButtons.removeAll()
+    }
+
+    private func playStatusSound(enabled: Bool) {
+        let soundName = NSSound.Name(enabled ? "Tink" : "Basso")
+        NSSound(named: soundName)?.play()
+    }
+
     private func focusChatGPT() {
         if let app = NSRunningApplication.runningApplications(withBundleIdentifier: chatGPTBundleID).first {
             app.activate(options: [.activateAllWindows])
@@ -316,6 +348,7 @@ private func printUsageAndExit() -> Never {
       Start / Select -> focus ChatGPT
       X / Y          -> Control + Shift + V
       L / R          -> Control + Option + Command + M
+      ZR             -> lock/unlock mapper
       D-pad Up/Down  -> Command + visible chat slot 1-9
       D-pad Left/Right -> unused
       A              -> hold Control + Shift + D

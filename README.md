@@ -15,6 +15,7 @@ This project is unofficial and is not affiliated with OpenAI, ChatGPT, or Ninten
 | B | Send message (`Return`) |
 | X / Y | Start or stop Voice Chat (`Control + Shift + V`) |
 | L / R | Toggle Voice Chat microphone (`Control + Option + Command + M`) |
+| ZR | Lock or unlock the mapper; locked mode ignores every controller input except ZR |
 | D-pad Up / Down | Step through visible chat slots (`Command + 1` through `Command + 9`) |
 | D-pad Left / Right | Unused |
 
@@ -66,6 +67,7 @@ Menu-bar status:
 - `SNES`: controller connected and keyboard control allowed
 - `SNES?`: waiting for the controller
 - `SNES!`: controller connected, but keyboard control is blocked
+- `SNES Off`: mapper locked; press ZR or use the menu to unlock
 
 ## CLI
 

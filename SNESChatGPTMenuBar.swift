@@ -25,6 +25,7 @@ private struct KeyStroke {
 
 private protocol ControllerMapperDelegate: AnyObject {
     func mapperConnectionChanged(connected: Bool, product: String?)
+    func mapperEnabledChanged(enabled: Bool)
     func mapperDidTrigger(_ message: String)
     func mapperPermissionChanged()
 }
@@ -34,7 +35,13 @@ private final class ControllerMapper {
 
     var isEnabled = true {
         didSet {
-            delegate?.mapperDidTrigger(isEnabled ? "Enabled" : "Disabled")
+            guard oldValue != isEnabled else { return }
+            if !isEnabled {
+                releaseHeldButtons()
+            }
+            playStatusSound(enabled: isEnabled)
+            delegate?.mapperEnabledChanged(enabled: isEnabled)
+            delegate?.mapperDidTrigger(isEnabled ? "Unlocked" : "Locked")
         }
     }
 
@@ -48,6 +55,7 @@ private final class ControllerMapper {
     private var heldButtons: Set<UInt32> = []
     private var lastActionTimes: [Action: Date] = [:]
     private let actionCooldown: TimeInterval = 0.18
+    private let lockToggleButtonUsage: UInt32 = 16
     private var visibleChatSlot = 2
     private let visibleChatSlotKeyCodes: [Int: CGKeyCode] = [
         1: 18,
@@ -62,7 +70,7 @@ private final class ControllerMapper {
     ]
 
     // Calibrated on this macOS host:
-    // B=1, A=2, X/Y=3/4, L=5, R=6, Select=9, Start=10.
+    // B=1, A=2, X/Y=3/4, L=5, R=6, ZL=7, Select=9, Start=10, ZR=16.
     private let buttonActions: [UInt32: Action] = [
         1: .send,            // B
         3: .toggleVoiceChat, // X / Y
@@ -172,7 +180,14 @@ private final class ControllerMapper {
         let wasPressed = lastButtonValues[usage] ?? false
         lastButtonValues[usage] = isPressed
 
-        guard isPressed != wasPressed, isEnabled else { return }
+        guard isPressed != wasPressed else { return }
+
+        if isPressed, usage == lockToggleButtonUsage {
+            isEnabled.toggle()
+            return
+        }
+
+        guard isEnabled else { return }
 
         if let stroke = heldButtonStrokes[usage] {
             if isPressed {
@@ -255,6 +270,20 @@ private final class ControllerMapper {
         postKeyUp(stroke)
     }
 
+    private func releaseHeldButtons() {
+        for button in heldButtons {
+            if let stroke = heldButtonStrokes[button] {
+                postKeyUp(stroke)
+            }
+        }
+        heldButtons.removeAll()
+    }
+
+    private func playStatusSound(enabled: Bool) {
+        let soundName = NSSound.Name(enabled ? "Tink" : "Basso")
+        NSSound(named: soundName)?.play()
+    }
+
     private func focusThenPost(_ stroke: KeyStroke) {
         focusChatGPT()
         Thread.sleep(forTimeInterval: 0.08)
@@ -302,7 +331,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
     private let statusMenuItem = NSMenuItem(title: "Controller: waiting", action: nil, keyEquivalent: "")
     private let keyboardMenuItem = NSMenuItem(title: "Keyboard control: checking", action: nil, keyEquivalent: "")
     private let lastActionMenuItem = NSMenuItem(title: "Last action: none", action: nil, keyEquivalent: "")
-    private let enabledMenuItem = NSMenuItem(title: "Enabled", action: #selector(toggleEnabled), keyEquivalent: "")
+    private let enabledMenuItem = NSMenuItem(title: "Mapper Enabled", action: #selector(toggleEnabled), keyEquivalent: "")
 
     private var isConnected = false
     private var connectedProduct: String?
@@ -351,6 +380,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
         menu.addItem(NSMenuItem(title: "B: send", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "X/Y: start/stop Voice Chat", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "L/R: Voice Chat mic toggle (^⌥⌘M)", action: nil, keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "ZR: lock/unlock mapper", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "D-pad Up/Down: visible chat slots 1-9", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "D-pad Left/Right: unused", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Start/Select: focus ChatGPT", action: nil, keyEquivalent: ""))
@@ -362,6 +392,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
     }
 
     private func updateStatusTitle() {
+        guard mapper.isEnabled else {
+            statusItem.button?.title = "SNES Off"
+            let product = connectedProduct ?? "waiting"
+            statusMenuItem.title = isConnected ? "Controller: \(product) (locked)" : "Controller: waiting (locked)"
+            return
+        }
+
         let permissionMarker = mapper.hasKeyboardPermission ? "" : "!"
         statusItem.button?.title = isConnected ? "SNES\(permissionMarker)" : "SNES?"
         let product = connectedProduct ?? "waiting"
@@ -379,6 +416,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
         updateStatusTitle()
     }
 
+    func mapperEnabledChanged(enabled: Bool) {
+        enabledMenuItem.state = enabled ? .on : .off
+        enabledMenuItem.title = enabled ? "Mapper Enabled" : "Mapper Locked"
+        updateStatusTitle()
+    }
+
     func mapperDidTrigger(_ message: String) {
         lastActionMenuItem.title = "Last action: \(message)"
         print("Last action: \(message)")
@@ -391,8 +434,6 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
 
     @objc private func toggleEnabled() {
         mapper.isEnabled.toggle()
-        enabledMenuItem.state = mapper.isEnabled ? .on : .off
-        statusItem.button?.title = mapper.isEnabled ? (isConnected ? "SNES" : "SNES?") : "SNES Off"
     }
 
     @objc private func focusChatGPT() {
