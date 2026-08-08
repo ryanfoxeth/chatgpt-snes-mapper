@@ -1,0 +1,6 @@
+.DS_Store
+.build/
+DerivedData/
+ChatGPTSNESMapper.app/
+*.log
+*.swp
