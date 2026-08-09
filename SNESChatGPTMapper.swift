@@ -7,6 +7,7 @@ private let vendorID = 0x057E
 private let productID = 0x2017
 private let chatGPTBundleID = "com.openai.codex"
 private let chatGPTPath = "/Applications/ChatGPT.app"
+private let defaultPresetName = "ChatGPT Voice Macropad"
 
 private enum Mode {
     case normal
@@ -21,6 +22,9 @@ private enum Action: String {
     case send = "send"
     case previousVisibleChat = "chat list up"
     case nextVisibleChat = "chat list down"
+    case toggleSidebar = "toggle sidebar"
+    case toggleSidePanel = "toggle side panel"
+    case newTab = "new tab"
 }
 
 private struct KeyStroke {
@@ -59,6 +63,7 @@ private final class Mapper {
         4: .toggleVoiceChat, // X / Y
         5: .toggleVoiceMic,  // L
         6: .toggleVoiceMic,  // R
+        7: .newTab,          // ZL
         9: .focusChatGPT,    // Select / Back
         10: .focusChatGPT    // Start
     ]
@@ -117,9 +122,11 @@ private final class Mapper {
             print("Start/Select: focus ChatGPT")
             print("X/Y: start/stop Voice Chat")
             print("L/R: toggle Voice Chat microphone shortcut (^⌥⌘M)")
+            print("ZL: open new tab")
             print("ZR: lock/unlock mapper")
             print("D-pad Up/Down: visible chat slots 1-9")
-            print("D-pad Left/Right: unused")
+            print("D-pad Left: toggle sidebar")
+            print("D-pad Right: toggle side panel")
             print("A: hold ChatGPT dictation shortcut")
             print("B: send message")
         case .monitor:
@@ -199,8 +206,12 @@ private final class Mapper {
         switch value {
         case 0:
             trigger(.previousVisibleChat)
+        case 2:
+            trigger(.toggleSidePanel)
         case 4:
             trigger(.nextVisibleChat)
+        case 6:
+            trigger(.toggleSidebar)
         default:
             break
         }
@@ -234,6 +245,12 @@ private final class Mapper {
             stepVisibleChat(by: -1)
         case .nextVisibleChat:
             stepVisibleChat(by: 1)
+        case .toggleSidebar:
+            focusThenPost(KeyStroke(keyCode: 11, flags: [.maskCommand]))
+        case .toggleSidePanel:
+            focusThenPost(KeyStroke(keyCode: 11, flags: [.maskAlternate, .maskCommand]))
+        case .newTab:
+            focusThenPost(KeyStroke(keyCode: 17, flags: [.maskCommand]))
         }
     }
 
@@ -348,11 +365,15 @@ private func printUsageAndExit() -> Never {
       Start / Select -> focus ChatGPT
       X / Y          -> Control + Shift + V
       L / R          -> Control + Option + Command + M
+      ZL             -> Command + T
       ZR             -> lock/unlock mapper
       D-pad Up/Down  -> Command + visible chat slot 1-9
-      D-pad Left/Right -> unused
+      D-pad Left     -> Command + B
+      D-pad Right    -> Option + Command + B
       A              -> hold Control + Shift + D
       B              -> Return
+
+    Default preset: \(defaultPresetName)
     """)
     exit(0)
 }

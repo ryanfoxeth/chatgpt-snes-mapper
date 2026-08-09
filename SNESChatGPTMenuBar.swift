@@ -7,6 +7,7 @@ private let vendorID = 0x057E
 private let productID = 0x2017
 private let chatGPTBundleID = "com.openai.codex"
 private let chatGPTPath = "/Applications/ChatGPT.app"
+private let defaultPresetName = "ChatGPT Voice Macropad"
 
 private enum Action: String {
     case focusChatGPT = "focus ChatGPT"
@@ -16,6 +17,9 @@ private enum Action: String {
     case send = "send"
     case previousVisibleChat = "chat list up"
     case nextVisibleChat = "chat list down"
+    case toggleSidebar = "toggle sidebar"
+    case toggleSidePanel = "toggle side panel"
+    case newTab = "new tab"
 }
 
 private struct KeyStroke {
@@ -77,6 +81,7 @@ private final class ControllerMapper {
         4: .toggleVoiceChat, // X / Y
         5: .toggleVoiceMic,  // L
         6: .toggleVoiceMic,  // R
+        7: .newTab,          // ZL
         9: .focusChatGPT,    // Select
         10: .focusChatGPT    // Start
     ]
@@ -132,6 +137,17 @@ private final class ControllerMapper {
             kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true
         ] as CFDictionary)
         delegate?.mapperPermissionChanged()
+    }
+
+    func loadDefaultPreset() {
+        releaseHeldButtons()
+        visibleChatSlot = 2
+        if isEnabled {
+            delegate?.mapperEnabledChanged(enabled: true)
+        } else {
+            isEnabled = true
+        }
+        delegate?.mapperDidTrigger("Loaded \(defaultPresetName)")
     }
 
     func focusChatGPT() {
@@ -210,8 +226,12 @@ private final class ControllerMapper {
         switch value {
         case 0:
             trigger(.previousVisibleChat)
+        case 2:
+            trigger(.toggleSidePanel)
         case 4:
             trigger(.nextVisibleChat)
+        case 6:
+            trigger(.toggleSidebar)
         default:
             break
         }
@@ -244,6 +264,12 @@ private final class ControllerMapper {
             stepVisibleChat(by: -1)
         case .nextVisibleChat:
             stepVisibleChat(by: 1)
+        case .toggleSidebar:
+            focusThenPost(KeyStroke(keyCode: 11, flags: [.maskCommand]))
+        case .toggleSidePanel:
+            focusThenPost(KeyStroke(keyCode: 11, flags: [.maskAlternate, .maskCommand]))
+        case .newTab:
+            focusThenPost(KeyStroke(keyCode: 17, flags: [.maskCommand]))
         }
     }
 
@@ -331,6 +357,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
     private let statusMenuItem = NSMenuItem(title: "Controller: waiting", action: nil, keyEquivalent: "")
     private let keyboardMenuItem = NSMenuItem(title: "Keyboard control: checking", action: nil, keyEquivalent: "")
     private let lastActionMenuItem = NSMenuItem(title: "Last action: none", action: nil, keyEquivalent: "")
+    private let presetMenuItem = NSMenuItem(title: "Preset: \(defaultPresetName)", action: nil, keyEquivalent: "")
     private let enabledMenuItem = NSMenuItem(title: "Mapper Enabled", action: #selector(toggleEnabled), keyEquivalent: "")
 
     private var isConnected = false
@@ -352,8 +379,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
         statusMenuItem.isEnabled = false
         keyboardMenuItem.isEnabled = false
         lastActionMenuItem.isEnabled = false
+        presetMenuItem.isEnabled = false
         enabledMenuItem.target = self
         enabledMenuItem.state = .on
+
+        let loadDefaultPresetItem = NSMenuItem(title: "Load Default Preset", action: #selector(loadDefaultPreset), keyEquivalent: "")
+        loadDefaultPresetItem.target = self
 
         let focusItem = NSMenuItem(title: "Focus ChatGPT", action: #selector(focusChatGPT), keyEquivalent: "")
         focusItem.target = self
@@ -370,8 +401,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
         menu.addItem(statusMenuItem)
         menu.addItem(keyboardMenuItem)
         menu.addItem(lastActionMenuItem)
+        menu.addItem(presetMenuItem)
         menu.addItem(.separator())
         menu.addItem(enabledMenuItem)
+        menu.addItem(loadDefaultPresetItem)
         menu.addItem(focusItem)
         menu.addItem(requestPermissionItem)
         menu.addItem(openAccessibilityItem)
@@ -380,9 +413,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
         menu.addItem(NSMenuItem(title: "B: send", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "X/Y: start/stop Voice Chat", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "L/R: Voice Chat mic toggle (^⌥⌘M)", action: nil, keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "ZL: new tab (⌘T)", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "ZR: lock/unlock mapper", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "D-pad Up/Down: visible chat slots 1-9", action: nil, keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "D-pad Left/Right: unused", action: nil, keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "D-pad Left: sidebar (⌘B)", action: nil, keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "D-pad Right: side panel (⌥⌘B)", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Start/Select: focus ChatGPT", action: nil, keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(quitItem)
@@ -434,6 +469,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
 
     @objc private func toggleEnabled() {
         mapper.isEnabled.toggle()
+    }
+
+    @objc private func loadDefaultPreset() {
+        mapper.loadDefaultPreset()
     }
 
     @objc private func focusChatGPT() {

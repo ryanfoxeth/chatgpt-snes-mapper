@@ -17,9 +17,13 @@ This project is unofficial and is not affiliated with OpenAI, ChatGPT, or Ninten
 | B | Send message (`Return`) |
 | X / Y | Start or stop Voice Chat (`Control + Shift + V`) |
 | L / R | Toggle Voice Chat microphone (`Control + Option + Command + M`) |
+| ZL | Open a new tab (`Command + T`) |
 | ZR | Lock or unlock the mapper; locked mode ignores every controller input except ZR |
 | D-pad Up / Down | Step through visible chat slots (`Command + 1` through `Command + 9`) |
-| D-pad Left / Right | Unused |
+| D-pad Left | Toggle the sidebar (`Command + B`) |
+| D-pad Right | Toggle the side/review panel (`Option + Command + B`) |
+
+The built-in default preset is `ChatGPT Voice Macropad`; use the menu-bar app's `Load Default Preset` item to restore these mappings.
 
 The mapper is calibrated for the official Nintendo SNES Controller:
 
