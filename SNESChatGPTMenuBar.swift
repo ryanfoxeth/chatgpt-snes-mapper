@@ -288,6 +288,7 @@ private final class ControllerMapper {
     private var lastHatValue = 8
     private var heldButtons: [UInt32: Action] = [:]
     private var lastActionTimes: [Action: Date] = [:]
+    private var statusSound: NSSound?
     private let actionCooldown: TimeInterval = 0.18
     private let lockToggleButtonUsage: UInt32 = 16
 
@@ -546,7 +547,10 @@ private final class ControllerMapper {
 
     private func playStatusSound(enabled: Bool) {
         let soundName = NSSound.Name(enabled ? "Tink" : "Basso")
-        NSSound(named: soundName)?.play()
+        statusSound?.stop()
+        statusSound = NSSound(named: soundName)
+        statusSound?.volume = 1.0
+        statusSound?.play()
     }
 
     private func focusThenPost(_ stroke: KeyStroke) {

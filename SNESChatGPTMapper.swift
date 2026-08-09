@@ -40,6 +40,7 @@ private final class Mapper {
     private var lastHatValue = 8
     private var heldButtons: Set<UInt32> = []
     private var lastActionTimes: [Action: Date] = [:]
+    private var statusSound: NSSound?
     private let actionCooldown: TimeInterval = 0.18
     private var isEnabled = true
     private let lockToggleButtonUsage: UInt32 = 16
@@ -285,7 +286,10 @@ private final class Mapper {
 
     private func playStatusSound(enabled: Bool) {
         let soundName = NSSound.Name(enabled ? "Tink" : "Basso")
-        NSSound(named: soundName)?.play()
+        statusSound?.stop()
+        statusSound = NSSound(named: soundName)
+        statusSound?.volume = 1.0
+        statusSound?.play()
     }
 
     private func focusChatGPT() {
