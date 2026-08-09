@@ -25,6 +25,7 @@ private enum Action: String {
     case nextChat = "next chat"
     case toggleSidebar = "toggle sidebar"
     case toggleSidePanel = "toggle side panel"
+    case newChat = "new chat"
     case newTab = "new tab"
 }
 
@@ -53,7 +54,7 @@ private final class Mapper {
         4: .toggleVoiceChat, // X
         5: .toggleVoiceMic,  // L
         6: .toggleVoiceMic,  // R
-        7: .newTab,          // ZL
+        7: .newChat,         // ZL
         9: .focusChatGPT,    // Select / Back
         10: .focusChatGPT    // Start
     ]
@@ -112,7 +113,7 @@ private final class Mapper {
             print("Start/Select: focus ChatGPT")
             print("X/Y: start/stop Voice Chat")
             print("L/R: toggle Voice Chat microphone shortcut (^⌥⌘M)")
-            print("ZL: open new tab")
+            print("ZL: start a new chat")
             print("ZR: lock/unlock mapper")
             print("D-pad Up/Down: previous/next chat")
             print("D-pad Left: toggle sidebar")
@@ -242,6 +243,8 @@ private final class Mapper {
             focusThenPost(KeyStroke(keyCode: 11, flags: [.maskCommand]))
         case .toggleSidePanel:
             focusThenPost(KeyStroke(keyCode: 11, flags: [.maskAlternate, .maskCommand]))
+        case .newChat:
+            focusThenPost(KeyStroke(keyCode: 45, flags: [.maskCommand]))
         case .newTab:
             focusThenPost(KeyStroke(keyCode: 17, flags: [.maskCommand]))
         }
@@ -362,7 +365,7 @@ private func printUsageAndExit() -> Never {
       X              -> Control + Shift + V
       Y              -> Command + A, Delete
       L / R          -> Control + Option + Command + M
-      ZL             -> Command + T
+      ZL             -> Command + N
       ZR             -> lock/unlock mapper
       D-pad Up       -> Shift + Command + [
       D-pad Down     -> Shift + Command + ]

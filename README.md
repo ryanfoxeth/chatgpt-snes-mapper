@@ -18,7 +18,7 @@ This project is unofficial and is not affiliated with OpenAI, ChatGPT, or Ninten
 | X | Start or stop Voice Chat (`Control + Shift + V`) |
 | Y | Clear the current input (`Command + A`, then `Delete`) |
 | L / R | Toggle Voice Chat microphone (`Control + Option + Command + M`) |
-| ZL | Open a new tab (`Command + T`) |
+| ZL | Start a new chat (`Command + N`) |
 | ZR | Lock or unlock the mapper; locked mode ignores every controller input except ZR |
 | D-pad Up | Previous chat (`Shift + Command + [`) |
 | D-pad Down | Next chat (`Shift + Command + ]`) |

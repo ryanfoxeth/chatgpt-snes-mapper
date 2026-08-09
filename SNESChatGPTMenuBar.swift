@@ -21,6 +21,7 @@ private enum Action: String, CaseIterable {
     case nextChat
     case toggleSidebar
     case toggleSidePanel
+    case newChat
     case newTab
     case lockUnlock
 
@@ -48,6 +49,8 @@ private enum Action: String, CaseIterable {
             return "Toggle Sidebar"
         case .toggleSidePanel:
             return "Toggle Side Panel"
+        case .newChat:
+            return "New Chat"
         case .newTab:
             return "New Tab"
         case .lockUnlock:
@@ -79,6 +82,8 @@ private enum Action: String, CaseIterable {
             return "\(displayName) (⌘B)"
         case .toggleSidePanel:
             return "\(displayName) (⌥⌘B)"
+        case .newChat:
+            return "\(displayName) (⌘N)"
         case .newTab:
             return "\(displayName) (⌘T)"
         case .lockUnlock:
@@ -102,6 +107,7 @@ private enum Action: String, CaseIterable {
         .nextChat,
         .toggleSidebar,
         .toggleSidePanel,
+        .newChat,
         .newTab
     ]
 
@@ -170,7 +176,7 @@ private enum Control: String, CaseIterable {
         case .l, .r:
             return .toggleVoiceMic
         case .zl:
-            return .newTab
+            return .newChat
         case .zr:
             return .lockUnlock
         case .select, .start:
@@ -499,6 +505,8 @@ private final class ControllerMapper {
             focusThenPost(KeyStroke(keyCode: 11, flags: [.maskCommand]))
         case .toggleSidePanel:
             focusThenPost(KeyStroke(keyCode: 11, flags: [.maskAlternate, .maskCommand]))
+        case .newChat:
+            focusThenPost(KeyStroke(keyCode: 45, flags: [.maskCommand]))
         case .newTab:
             focusThenPost(KeyStroke(keyCode: 17, flags: [.maskCommand]))
         case .lockUnlock:
@@ -775,6 +783,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
     }
 
     @objc private func openAccessibilitySettings() {
+        mapper.requestKeyboardPermission()
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
         }
