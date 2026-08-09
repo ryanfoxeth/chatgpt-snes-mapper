@@ -228,8 +228,8 @@ private enum Control: String, CaseIterable {
 private let buttonControls: [UInt32: Control] = [
     1: .b,
     2: .a,
-    3: .x,
-    4: .y,
+    3: .y,
+    4: .x,
     5: .l,
     6: .r,
     7: .zl,

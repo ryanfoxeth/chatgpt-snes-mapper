@@ -46,11 +46,11 @@ private final class Mapper {
     private let lockToggleButtonUsage: UInt32 = 16
 
     // Calibrated on this macOS host:
-    // B=1, A=2, X/Y=3/4, L=5, R=6, ZL=7, Select=9, Start=10, ZR=16.
+    // B=1, A=2, Y=3, X=4, L=5, R=6, ZL=7, Select=9, Start=10, ZR=16.
     private let buttonActions: [UInt32: Action] = [
         1: .send,            // B
-        3: .toggleVoiceChat, // X
-        4: .clearInput,      // Y
+        3: .clearInput,      // Y
+        4: .toggleVoiceChat, // X
         5: .toggleVoiceMic,  // L
         6: .toggleVoiceMic,  // R
         7: .newTab,          // ZL
