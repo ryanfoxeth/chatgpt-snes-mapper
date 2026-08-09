@@ -9,17 +9,245 @@ private let chatGPTBundleID = "com.openai.codex"
 private let chatGPTPath = "/Applications/ChatGPT.app"
 private let defaultPresetName = "ChatGPT Voice Macropad"
 
-private enum Action: String {
-    case focusChatGPT = "focus ChatGPT"
-    case toggleVoiceChat = "toggle Voice Chat"
-    case toggleVoiceMic = "toggle Voice Chat microphone"
-    case dictation = "dictation"
-    case send = "send"
-    case previousVisibleChat = "chat list up"
-    case nextVisibleChat = "chat list down"
-    case toggleSidebar = "toggle sidebar"
-    case toggleSidePanel = "toggle side panel"
-    case newTab = "new tab"
+private enum Action: String, CaseIterable {
+    case none
+    case focusChatGPT
+    case holdDictation
+    case send
+    case clearInput
+    case toggleVoiceChat
+    case toggleVoiceMic
+    case previousChat
+    case nextChat
+    case toggleSidebar
+    case toggleSidePanel
+    case newTab
+    case lockUnlock
+
+    var displayName: String {
+        switch self {
+        case .none:
+            return "Unassigned"
+        case .focusChatGPT:
+            return "Focus ChatGPT"
+        case .holdDictation:
+            return "Hold Dictation"
+        case .send:
+            return "Send"
+        case .clearInput:
+            return "Clear Input"
+        case .toggleVoiceChat:
+            return "Start/Stop Voice Chat"
+        case .toggleVoiceMic:
+            return "Voice Chat Mic Toggle"
+        case .previousChat:
+            return "Previous Chat"
+        case .nextChat:
+            return "Next Chat"
+        case .toggleSidebar:
+            return "Toggle Sidebar"
+        case .toggleSidePanel:
+            return "Toggle Side Panel"
+        case .newTab:
+            return "New Tab"
+        case .lockUnlock:
+            return "Lock / Unlock"
+        }
+    }
+
+    var menuTitle: String {
+        switch self {
+        case .none:
+            return displayName
+        case .focusChatGPT:
+            return displayName
+        case .holdDictation:
+            return "\(displayName) (^⇧D)"
+        case .send:
+            return "\(displayName) (Return)"
+        case .clearInput:
+            return "\(displayName) (⌘A, Delete)"
+        case .toggleVoiceChat:
+            return "\(displayName) (^⇧V)"
+        case .toggleVoiceMic:
+            return "\(displayName) (^⌥⌘M)"
+        case .previousChat:
+            return "\(displayName) (⇧⌘[)"
+        case .nextChat:
+            return "\(displayName) (⇧⌘])"
+        case .toggleSidebar:
+            return "\(displayName) (⌘B)"
+        case .toggleSidePanel:
+            return "\(displayName) (⌥⌘B)"
+        case .newTab:
+            return "\(displayName) (⌘T)"
+        case .lockUnlock:
+            return displayName
+        }
+    }
+
+    var isHoldAction: Bool {
+        self == .holdDictation
+    }
+
+    static let buttonChoices: [Action] = [
+        .none,
+        .focusChatGPT,
+        .holdDictation,
+        .send,
+        .clearInput,
+        .toggleVoiceChat,
+        .toggleVoiceMic,
+        .previousChat,
+        .nextChat,
+        .toggleSidebar,
+        .toggleSidePanel,
+        .newTab
+    ]
+
+    static let hatChoices: [Action] = buttonChoices.filter { !$0.isHoldAction }
+}
+
+private enum Control: String, CaseIterable {
+    case a
+    case b
+    case x
+    case y
+    case l
+    case r
+    case zl
+    case zr
+    case select
+    case start
+    case dpadUp
+    case dpadDown
+    case dpadLeft
+    case dpadRight
+
+    var displayName: String {
+        switch self {
+        case .a:
+            return "A"
+        case .b:
+            return "B"
+        case .x:
+            return "X"
+        case .y:
+            return "Y"
+        case .l:
+            return "L"
+        case .r:
+            return "R"
+        case .zl:
+            return "ZL"
+        case .zr:
+            return "ZR"
+        case .select:
+            return "Select"
+        case .start:
+            return "Start"
+        case .dpadUp:
+            return "D-pad Up"
+        case .dpadDown:
+            return "D-pad Down"
+        case .dpadLeft:
+            return "D-pad Left"
+        case .dpadRight:
+            return "D-pad Right"
+        }
+    }
+
+    var defaultAction: Action {
+        switch self {
+        case .a:
+            return .holdDictation
+        case .b:
+            return .send
+        case .x:
+            return .toggleVoiceChat
+        case .y:
+            return .clearInput
+        case .l, .r:
+            return .toggleVoiceMic
+        case .zl:
+            return .newTab
+        case .zr:
+            return .lockUnlock
+        case .select, .start:
+            return .focusChatGPT
+        case .dpadUp:
+            return .previousChat
+        case .dpadDown:
+            return .nextChat
+        case .dpadLeft:
+            return .toggleSidebar
+        case .dpadRight:
+            return .toggleSidePanel
+        }
+    }
+
+    var isConfigurable: Bool {
+        self != .zr
+    }
+
+    var isHatControl: Bool {
+        switch self {
+        case .dpadUp, .dpadDown, .dpadLeft, .dpadRight:
+            return true
+        default:
+            return false
+        }
+    }
+
+    var choices: [Action] {
+        isHatControl ? Action.hatChoices : Action.buttonChoices
+    }
+
+    var storageKey: String {
+        "mapping.\(rawValue)"
+    }
+
+    static let menuOrder: [Control] = [
+        .a,
+        .b,
+        .x,
+        .y,
+        .l,
+        .r,
+        .zl,
+        .zr,
+        .select,
+        .start,
+        .dpadUp,
+        .dpadDown,
+        .dpadLeft,
+        .dpadRight
+    ]
+}
+
+private let buttonControls: [UInt32: Control] = [
+    1: .b,
+    2: .a,
+    3: .x,
+    4: .y,
+    5: .l,
+    6: .r,
+    7: .zl,
+    9: .select,
+    10: .start
+]
+
+private let hatControls: [Int: Control] = [
+    0: .dpadUp,
+    2: .dpadRight,
+    4: .dpadDown,
+    6: .dpadLeft
+]
+
+private extension Dictionary where Key == Control, Value == Action {
+    static var defaultMappings: [Control: Action] {
+        Dictionary(uniqueKeysWithValues: Control.allCases.map { ($0, $0.defaultAction) })
+    }
 }
 
 private struct KeyStroke {
@@ -30,6 +258,7 @@ private struct KeyStroke {
 private protocol ControllerMapperDelegate: AnyObject {
     func mapperConnectionChanged(connected: Bool, product: String?)
     func mapperEnabledChanged(enabled: Bool)
+    func mapperMappingsChanged()
     func mapperDidTrigger(_ message: String)
     func mapperPermissionChanged()
 }
@@ -54,43 +283,17 @@ private final class ControllerMapper {
     }
 
     private let manager: IOHIDManager
+    private var mappings = [Control: Action].defaultMappings
     private var lastButtonValues: [UInt32: Bool] = [:]
     private var lastHatValue = 8
-    private var heldButtons: Set<UInt32> = []
+    private var heldButtons: [UInt32: Action] = [:]
     private var lastActionTimes: [Action: Date] = [:]
     private let actionCooldown: TimeInterval = 0.18
     private let lockToggleButtonUsage: UInt32 = 16
-    private var visibleChatSlot = 2
-    private let visibleChatSlotKeyCodes: [Int: CGKeyCode] = [
-        1: 18,
-        2: 19,
-        3: 20,
-        4: 21,
-        5: 23,
-        6: 22,
-        7: 26,
-        8: 28,
-        9: 25
-    ]
-
-    // Calibrated on this macOS host:
-    // B=1, A=2, X/Y=3/4, L=5, R=6, ZL=7, Select=9, Start=10, ZR=16.
-    private let buttonActions: [UInt32: Action] = [
-        1: .send,            // B
-        3: .toggleVoiceChat, // X / Y
-        4: .toggleVoiceChat, // X / Y
-        5: .toggleVoiceMic,  // L
-        6: .toggleVoiceMic,  // R
-        7: .newTab,          // ZL
-        9: .focusChatGPT,    // Select
-        10: .focusChatGPT    // Start
-    ]
-    private let heldButtonStrokes: [UInt32: KeyStroke] = [
-        2: KeyStroke(keyCode: 2, flags: [.maskControl, .maskShift]) // A: hold ChatGPT dictation
-    ]
 
     init() {
         self.manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
+        loadSavedMappings()
     }
 
     func start() {
@@ -139,9 +342,30 @@ private final class ControllerMapper {
         delegate?.mapperPermissionChanged()
     }
 
+    func action(for control: Control) -> Action {
+        if control == .zr {
+            return .lockUnlock
+        }
+        return mappings[control] ?? control.defaultAction
+    }
+
+    func setAction(_ action: Action, for control: Control) {
+        guard control.isConfigurable, control.choices.contains(action) else { return }
+        releaseHeldButtons()
+        mappings[control] = action
+        UserDefaults.standard.set(action.rawValue, forKey: control.storageKey)
+        delegate?.mapperMappingsChanged()
+        delegate?.mapperDidTrigger("\(control.displayName) → \(action.displayName)")
+    }
+
     func loadDefaultPreset() {
         releaseHeldButtons()
-        visibleChatSlot = 2
+        mappings = .defaultMappings
+        for control in Control.allCases where control.isConfigurable {
+            UserDefaults.standard.set(control.defaultAction.rawValue, forKey: control.storageKey)
+        }
+        lastActionTimes.removeAll()
+        delegate?.mapperMappingsChanged()
         if isEnabled {
             delegate?.mapperEnabledChanged(enabled: true)
         } else {
@@ -165,6 +389,18 @@ private final class ControllerMapper {
             } else {
                 app?.activate(options: [.activateAllWindows])
             }
+        }
+    }
+
+    private func loadSavedMappings() {
+        mappings = .defaultMappings
+        for control in Control.allCases where control.isConfigurable {
+            guard let rawValue = UserDefaults.standard.string(forKey: control.storageKey),
+                  let action = Action(rawValue: rawValue),
+                  control.choices.contains(action) else {
+                continue
+            }
+            mappings[control] = action
         }
     }
 
@@ -203,15 +439,18 @@ private final class ControllerMapper {
             return
         }
 
-        guard isEnabled else { return }
+        guard isEnabled, let control = buttonControls[usage] else { return }
 
-        if let stroke = heldButtonStrokes[usage] {
+        let action = action(for: control)
+        guard action != .none else { return }
+
+        if action.isHoldAction {
             if isPressed {
-                beginHold(button: usage, stroke: stroke)
+                beginHold(button: usage, action: action)
             } else {
-                endHold(button: usage, stroke: stroke)
+                endHold(button: usage)
             }
-        } else if isPressed, let action = buttonActions[usage] {
+        } else if isPressed {
             trigger(action)
         }
     }
@@ -221,88 +460,88 @@ private final class ControllerMapper {
         guard value != lastHatValue else { return }
         lastHatValue = value
 
-        guard isEnabled else { return }
-
-        switch value {
-        case 0:
-            trigger(.previousVisibleChat)
-        case 2:
-            trigger(.toggleSidePanel)
-        case 4:
-            trigger(.nextVisibleChat)
-        case 6:
-            trigger(.toggleSidebar)
-        default:
-            break
-        }
+        guard isEnabled, let control = hatControls[value] else { return }
+        trigger(action(for: control))
     }
 
     private func trigger(_ action: Action) {
+        guard action != .none else { return }
+
         let now = Date()
         if let last = lastActionTimes[action], now.timeIntervalSince(last) < actionCooldown {
             return
         }
         lastActionTimes[action] = now
 
-        delegate?.mapperDidTrigger(action.rawValue)
+        delegate?.mapperDidTrigger(action.displayName)
 
         switch action {
+        case .none:
+            break
         case .focusChatGPT:
             focusChatGPT()
-        case .toggleVoiceChat:
-            // ChatGPT default: Toggle voice chat = Control + Shift + V.
-            focusThenPost(KeyStroke(keyCode: 9, flags: [.maskControl, .maskShift]))
-        case .toggleVoiceMic:
-            // Assign in ChatGPT Keyboard Shortcuts:
-            // Toggle Voice Chat microphone = Control + Option + Command + M
-            focusThenPost(KeyStroke(keyCode: 46, flags: [.maskControl, .maskAlternate, .maskCommand]))
-        case .dictation:
+        case .holdDictation:
             focusThenPost(KeyStroke(keyCode: 2, flags: [.maskControl, .maskShift]))
         case .send:
             focusThenPost(KeyStroke(keyCode: 36, flags: []))
-        case .previousVisibleChat:
-            stepVisibleChat(by: -1)
-        case .nextVisibleChat:
-            stepVisibleChat(by: 1)
+        case .clearInput:
+            clearInput()
+        case .toggleVoiceChat:
+            focusThenPost(KeyStroke(keyCode: 9, flags: [.maskControl, .maskShift]))
+        case .toggleVoiceMic:
+            focusThenPost(KeyStroke(keyCode: 46, flags: [.maskControl, .maskAlternate, .maskCommand]))
+        case .previousChat:
+            focusThenPost(KeyStroke(keyCode: 33, flags: [.maskShift, .maskCommand]))
+        case .nextChat:
+            focusThenPost(KeyStroke(keyCode: 30, flags: [.maskShift, .maskCommand]))
         case .toggleSidebar:
             focusThenPost(KeyStroke(keyCode: 11, flags: [.maskCommand]))
         case .toggleSidePanel:
             focusThenPost(KeyStroke(keyCode: 11, flags: [.maskAlternate, .maskCommand]))
         case .newTab:
             focusThenPost(KeyStroke(keyCode: 17, flags: [.maskCommand]))
+        case .lockUnlock:
+            isEnabled.toggle()
         }
     }
 
-    private func stepVisibleChat(by delta: Int) {
-        visibleChatSlot = min(9, max(1, visibleChatSlot + delta))
-        guard let keyCode = visibleChatSlotKeyCodes[visibleChatSlot] else { return }
-        delegate?.mapperDidTrigger("chat slot \(visibleChatSlot)")
-        focusThenPost(KeyStroke(keyCode: keyCode, flags: [.maskCommand]))
-    }
-
-    private func beginHold(button: UInt32, stroke: KeyStroke) {
-        guard !heldButtons.contains(button) else { return }
-        heldButtons.insert(button)
-        delegate?.mapperDidTrigger("dictation down")
+    private func beginHold(button: UInt32, action: Action) {
+        guard heldButtons[button] == nil else { return }
+        heldButtons[button] = action
+        delegate?.mapperDidTrigger("\(action.displayName) down")
         focusChatGPT()
         Thread.sleep(forTimeInterval: 0.08)
-        postKeyDown(stroke)
+        postHoldAction(action, keyDown: true)
     }
 
-    private func endHold(button: UInt32, stroke: KeyStroke) {
-        guard heldButtons.contains(button) else { return }
-        heldButtons.remove(button)
-        delegate?.mapperDidTrigger("dictation up")
-        postKeyUp(stroke)
+    private func endHold(button: UInt32) {
+        guard let action = heldButtons.removeValue(forKey: button) else { return }
+        delegate?.mapperDidTrigger("\(action.displayName) up")
+        postHoldAction(action, keyDown: false)
     }
 
     private func releaseHeldButtons() {
-        for button in heldButtons {
-            if let stroke = heldButtonStrokes[button] {
-                postKeyUp(stroke)
-            }
+        for action in heldButtons.values {
+            postHoldAction(action, keyDown: false)
         }
         heldButtons.removeAll()
+    }
+
+    private func postHoldAction(_ action: Action, keyDown: Bool) {
+        switch action {
+        case .holdDictation:
+            postKey(KeyStroke(keyCode: 2, flags: [.maskControl, .maskShift]), keyDown: keyDown)
+        default:
+            break
+        }
+    }
+
+    private func clearInput() {
+        focusChatGPT()
+        Thread.sleep(forTimeInterval: 0.08)
+        post(KeyStroke(keyCode: 0, flags: [.maskCommand]))
+        usleep(50_000)
+        post(KeyStroke(keyCode: 51, flags: []))
     }
 
     private func playStatusSound(enabled: Bool) {
@@ -376,12 +615,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
     }
 
     private func buildMenu() {
+        menu.removeAllItems()
         statusMenuItem.isEnabled = false
         keyboardMenuItem.isEnabled = false
         lastActionMenuItem.isEnabled = false
         presetMenuItem.isEnabled = false
         enabledMenuItem.target = self
-        enabledMenuItem.state = .on
+        enabledMenuItem.state = mapper.isEnabled ? .on : .off
+        enabledMenuItem.title = mapper.isEnabled ? "Mapper Enabled" : "Mapper Locked"
 
         let loadDefaultPresetItem = NSMenuItem(title: "Load Default Preset", action: #selector(loadDefaultPreset), keyEquivalent: "")
         loadDefaultPresetItem.target = self
@@ -405,25 +646,55 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
         menu.addItem(.separator())
         menu.addItem(enabledMenuItem)
         menu.addItem(loadDefaultPresetItem)
+        menu.addItem(makeMappingsMenuItem())
         menu.addItem(focusItem)
         menu.addItem(requestPermissionItem)
         menu.addItem(openAccessibilityItem)
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "A: hold dictation", action: nil, keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "B: send", action: nil, keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "X/Y: start/stop Voice Chat", action: nil, keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "L/R: Voice Chat mic toggle (^⌥⌘M)", action: nil, keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "ZL: new tab (⌘T)", action: nil, keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "ZR: lock/unlock mapper", action: nil, keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "D-pad Up/Down: visible chat slots 1-9", action: nil, keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "D-pad Left: sidebar (⌘B)", action: nil, keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "D-pad Right: side panel (⌥⌘B)", action: nil, keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Start/Select: focus ChatGPT", action: nil, keyEquivalent: ""))
+        menu.addItem(disabledItem("Current Map"))
+        for control in Control.menuOrder {
+            menu.addItem(disabledItem("\(control.displayName): \(mapper.action(for: control).menuTitle)"))
+        }
         menu.addItem(.separator())
         menu.addItem(quitItem)
 
         statusItem.menu = menu
         statusItem.button?.toolTip = "ChatGPT SNES Mapper"
+    }
+
+    private func makeMappingsMenuItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Mappings", action: nil, keyEquivalent: "")
+        let submenu = NSMenu(title: "Mappings")
+
+        for control in Control.menuOrder {
+            let currentAction = mapper.action(for: control)
+            let controlItem = NSMenuItem(title: "\(control.displayName): \(currentAction.menuTitle)", action: nil, keyEquivalent: "")
+
+            if control.isConfigurable {
+                let controlMenu = NSMenu(title: control.displayName)
+                for action in control.choices {
+                    let actionItem = NSMenuItem(title: action.menuTitle, action: #selector(selectMapping(_:)), keyEquivalent: "")
+                    actionItem.target = self
+                    actionItem.representedObject = "\(control.rawValue)|\(action.rawValue)"
+                    actionItem.state = action == currentAction ? .on : .off
+                    controlMenu.addItem(actionItem)
+                }
+                controlItem.submenu = controlMenu
+            } else {
+                controlItem.isEnabled = false
+            }
+
+            submenu.addItem(controlItem)
+        }
+
+        item.submenu = submenu
+        return item
+    }
+
+    private func disabledItem(_ title: String) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        return item
     }
 
     private func updateStatusTitle() {
@@ -457,6 +728,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
         updateStatusTitle()
     }
 
+    func mapperMappingsChanged() {
+        buildMenu()
+        updatePermissionTitle()
+    }
+
     func mapperDidTrigger(_ message: String) {
         lastActionMenuItem.title = "Last action: \(message)"
         print("Last action: \(message)")
@@ -465,6 +741,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
 
     func mapperPermissionChanged() {
         updatePermissionTitle()
+    }
+
+    @objc private func selectMapping(_ sender: NSMenuItem) {
+        guard let payload = sender.representedObject as? String else { return }
+        let parts = payload.split(separator: "|", maxSplits: 1).map(String.init)
+        guard parts.count == 2,
+              let control = Control(rawValue: parts[0]),
+              let action = Action(rawValue: parts[1]) else {
+            return
+        }
+        mapper.setAction(action, for: control)
     }
 
     @objc private func toggleEnabled() {

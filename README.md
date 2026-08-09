@@ -15,15 +15,17 @@ This project is unofficial and is not affiliated with OpenAI, ChatGPT, or Ninten
 | Start / Select | Open or focus ChatGPT |
 | A | Hold ChatGPT dictation (`Control + Shift + D`) |
 | B | Send message (`Return`) |
-| X / Y | Start or stop Voice Chat (`Control + Shift + V`) |
+| X | Start or stop Voice Chat (`Control + Shift + V`) |
+| Y | Clear the current input (`Command + A`, then `Delete`) |
 | L / R | Toggle Voice Chat microphone (`Control + Option + Command + M`) |
 | ZL | Open a new tab (`Command + T`) |
 | ZR | Lock or unlock the mapper; locked mode ignores every controller input except ZR |
-| D-pad Up / Down | Step through visible chat slots (`Command + 1` through `Command + 9`) |
+| D-pad Up | Previous chat (`Shift + Command + [`) |
+| D-pad Down | Next chat (`Shift + Command + ]`) |
 | D-pad Left | Toggle the sidebar (`Command + B`) |
 | D-pad Right | Toggle the side/review panel (`Option + Command + B`) |
 
-The built-in default preset is `ChatGPT Voice Macropad`; use the menu-bar app's `Load Default Preset` item to restore these mappings.
+The built-in default preset is `ChatGPT Voice Macropad`; use the menu-bar app's `Load Default Preset` item to restore these mappings. Use the `Mappings` menu to change a control's action. Custom mappings are saved with macOS `UserDefaults` and survive relaunch.
 
 The mapper is calibrated for the official Nintendo SNES Controller:
 
@@ -119,7 +121,7 @@ Use monitor mode to calibrate a different controller:
 ~/.local/bin/chatgpt-snes-mapper --monitor
 ```
 
-Contributions are welcome. Good next improvements include configurable mappings, support for more controllers, and better chat-list navigation once ChatGPT exposes a more precise shortcut.
+Contributions are welcome. Good next improvements include import/export for mapping presets and support for more controllers.
 
 ## License
 

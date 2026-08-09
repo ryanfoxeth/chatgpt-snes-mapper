@@ -20,8 +20,9 @@ private enum Action: String {
     case toggleVoiceMic = "toggle Voice Chat microphone"
     case dictation = "dictation"
     case send = "send"
-    case previousVisibleChat = "chat list up"
-    case nextVisibleChat = "chat list down"
+    case clearInput = "clear input"
+    case previousChat = "previous chat"
+    case nextChat = "next chat"
     case toggleSidebar = "toggle sidebar"
     case toggleSidePanel = "toggle side panel"
     case newTab = "new tab"
@@ -42,25 +43,13 @@ private final class Mapper {
     private let actionCooldown: TimeInterval = 0.18
     private var isEnabled = true
     private let lockToggleButtonUsage: UInt32 = 16
-    private var visibleChatSlot = 2
-    private let visibleChatSlotKeyCodes: [Int: CGKeyCode] = [
-        1: 18,
-        2: 19,
-        3: 20,
-        4: 21,
-        5: 23,
-        6: 22,
-        7: 26,
-        8: 28,
-        9: 25
-    ]
 
     // Calibrated on this macOS host:
     // B=1, A=2, X/Y=3/4, L=5, R=6, ZL=7, Select=9, Start=10, ZR=16.
     private let buttonActions: [UInt32: Action] = [
         1: .send,            // B
-        3: .toggleVoiceChat, // X / Y
-        4: .toggleVoiceChat, // X / Y
+        3: .toggleVoiceChat, // X
+        4: .clearInput,      // Y
         5: .toggleVoiceMic,  // L
         6: .toggleVoiceMic,  // R
         7: .newTab,          // ZL
@@ -124,10 +113,11 @@ private final class Mapper {
             print("L/R: toggle Voice Chat microphone shortcut (^⌥⌘M)")
             print("ZL: open new tab")
             print("ZR: lock/unlock mapper")
-            print("D-pad Up/Down: visible chat slots 1-9")
+            print("D-pad Up/Down: previous/next chat")
             print("D-pad Left: toggle sidebar")
             print("D-pad Right: toggle side panel")
             print("A: hold ChatGPT dictation shortcut")
+            print("Y: clear input")
             print("B: send message")
         case .monitor:
             print("Monitor mode. Press SNES buttons; this will print IOHID usages.")
@@ -205,11 +195,11 @@ private final class Mapper {
 
         switch value {
         case 0:
-            trigger(.previousVisibleChat)
+            trigger(.previousChat)
         case 2:
             trigger(.toggleSidePanel)
         case 4:
-            trigger(.nextVisibleChat)
+            trigger(.nextChat)
         case 6:
             trigger(.toggleSidebar)
         default:
@@ -241,10 +231,12 @@ private final class Mapper {
             focusThenPost(KeyStroke(keyCode: 2, flags: [.maskControl, .maskShift]))
         case .send:
             focusThenPost(KeyStroke(keyCode: 36, flags: []))
-        case .previousVisibleChat:
-            stepVisibleChat(by: -1)
-        case .nextVisibleChat:
-            stepVisibleChat(by: 1)
+        case .clearInput:
+            clearInput()
+        case .previousChat:
+            focusThenPost(KeyStroke(keyCode: 33, flags: [.maskShift, .maskCommand]))
+        case .nextChat:
+            focusThenPost(KeyStroke(keyCode: 30, flags: [.maskShift, .maskCommand]))
         case .toggleSidebar:
             focusThenPost(KeyStroke(keyCode: 11, flags: [.maskCommand]))
         case .toggleSidePanel:
@@ -252,14 +244,6 @@ private final class Mapper {
         case .newTab:
             focusThenPost(KeyStroke(keyCode: 17, flags: [.maskCommand]))
         }
-    }
-
-    private func stepVisibleChat(by delta: Int) {
-        visibleChatSlot = min(9, max(1, visibleChatSlot + delta))
-        guard let keyCode = visibleChatSlotKeyCodes[visibleChatSlot] else { return }
-        print("Action: chat slot \(visibleChatSlot)")
-        fflush(stdout)
-        focusThenPost(KeyStroke(keyCode: keyCode, flags: [.maskCommand]))
     }
 
     private func beginHold(button: UInt32, stroke: KeyStroke) {
@@ -328,6 +312,14 @@ private final class Mapper {
         post(stroke)
     }
 
+    private func clearInput() {
+        focusChatGPT()
+        Thread.sleep(forTimeInterval: 0.08)
+        post(KeyStroke(keyCode: 0, flags: [.maskCommand]))
+        usleep(50_000)
+        post(KeyStroke(keyCode: 51, flags: []))
+    }
+
     private func post(_ stroke: KeyStroke) {
         postKeyDown(stroke)
         usleep(30_000)
@@ -363,11 +355,13 @@ private func printUsageAndExit() -> Never {
 
     Default map:
       Start / Select -> focus ChatGPT
-      X / Y          -> Control + Shift + V
+      X              -> Control + Shift + V
+      Y              -> Command + A, Delete
       L / R          -> Control + Option + Command + M
       ZL             -> Command + T
       ZR             -> lock/unlock mapper
-      D-pad Up/Down  -> Command + visible chat slot 1-9
+      D-pad Up       -> Shift + Command + [
+      D-pad Down     -> Shift + Command + ]
       D-pad Left     -> Command + B
       D-pad Right    -> Option + Command + B
       A              -> hold Control + Shift + D
