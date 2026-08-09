@@ -6,7 +6,7 @@ It watches the SNES controller over HID, shows controller/permission status in t
 
 This project is unofficial and is not affiliated with OpenAI, ChatGPT, or Nintendo.
 
-![SNES controller map](assets/controller-map.png)
+![SNES controller map](assets/snes-controller-map.png)
 
 ## Controller Map
 
