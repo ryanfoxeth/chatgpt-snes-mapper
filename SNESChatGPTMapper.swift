@@ -488,6 +488,11 @@ private func printUsageAndExit() -> Never {
       Stick Left    -> Command + B
       Stick Right   -> Option + Command + B
 
+    Required ChatGPT shortcuts:
+      Toggle Voice Chat Microphone        -> Control + Option + Command + M
+      Browser/content side-panel expansion -> Control + Command + Z
+      Joy-Con R and SL require the microphone shortcut; SR requires the panel shortcut.
+
     Default preset: \(defaultPresetName)
     """)
     exit(0)

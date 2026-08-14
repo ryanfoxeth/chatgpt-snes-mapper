@@ -934,6 +934,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
         menu.addItem(presetMenuItem)
         menu.addItem(.separator())
         menu.addItem(makeControllerSelectionMenuItem())
+        menu.addItem(makeRequiredShortcutsMenuItem())
         menu.addItem(enabledMenuItem)
         menu.addItem(loadDefaultPresetItem)
         menu.addItem(makeMappingsMenuItem())
@@ -972,6 +973,18 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
             submenu.addItem(selectionItem)
         }
 
+        item.submenu = submenu
+        return item
+    }
+
+    private func makeRequiredShortcutsMenuItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Required ChatGPT Shortcuts", action: nil, keyEquivalent: "")
+        let submenu = NSMenu(title: "Required ChatGPT Shortcuts")
+        submenu.addItem(disabledItem("Toggle Voice Chat Microphone: Control-Option-Command-M"))
+        submenu.addItem(disabledItem("Browser/content side-panel expansion: Control-Command-Z"))
+        submenu.addItem(.separator())
+        submenu.addItem(disabledItem("Joy-Con R / SL use the microphone shortcut"))
+        submenu.addItem(disabledItem("Joy-Con SR uses the panel shortcut"))
         item.submenu = submenu
         return item
     }

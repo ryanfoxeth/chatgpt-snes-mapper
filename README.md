@@ -29,6 +29,8 @@ The built-in default preset is `ChatGPT Voice Macropad`; use the menu-bar app's 
 
 ## Joy-Con (R) Map
 
+![Joy-Con (R) controller map](assets/joycon-r-controller-map.png?v=20260814)
+
 The right Joy-Con has profile-specific defaults while leaving every SNES mapping unchanged:
 
 | Joy-Con (R) control | Action |
@@ -108,15 +110,14 @@ Check the installed app's current Accessibility status directly:
   --check-accessibility
 ```
 
-## ChatGPT Shortcut Setup
+## Required ChatGPT Shortcuts
 
-In ChatGPT Desktop, open Settings > Keyboard shortcuts and confirm:
+Before using the Joy-Con microphone and SR actions, open ChatGPT Settings > Keyboard shortcuts and assign:
 
-- `Toggle voice chat` is `Control + Shift + V`
-- `Toggle Voice Chat microphone` is `Control + Option + Command + M`
-- Ryan's custom `Expand browser/content panel` shortcut is `Control + Command + Z`
+- `Toggle Voice Chat Microphone` to `Control + Option + Command + M`
+- The browser/content side-panel expansion action to `Control + Command + Z` (Ryan's custom shortcut)
 
-The microphone and browser/content-panel shortcuts must match these values for their controller actions to work.
+These are prerequisites: Joy-Con R and SL use the microphone shortcut, and Joy-Con SR uses the browser/content side-panel shortcut.
 
 ## macOS Permissions
 

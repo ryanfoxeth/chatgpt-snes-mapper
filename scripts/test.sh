@@ -20,6 +20,11 @@ MENU_MAPPINGS="$("$APP_PATH/Contents/MacOS/ChatGPTSNESMapper" --print-default-ma
 CLI_MAPPINGS="$("$CLI_PATH" --print-default-mappings)"
 CLI_HELP="$("$CLI_PATH" --help)"
 
+if [[ ! -s "$ROOT_DIR/assets/joycon-r-controller-map.png" ]]; then
+  echo "Missing Joy-Con controller-map asset." >&2
+  exit 1
+fi
+
 assert_contains() {
   local output="$1"
   local expected="$2"
@@ -117,6 +122,17 @@ assert_contains "$CLI_HELP" "  SR            -> Control + Command + Z"
 assert_contains "$CLI_HELP" "  R             -> Control + Option + Command + M"
 assert_contains "$CLI_HELP" "  +             -> Command + N"
 assert_contains "$CLI_HELP" "  Home          -> focus ChatGPT"
+assert_contains "$CLI_HELP" "Required ChatGPT shortcuts:"
+assert_contains "$CLI_HELP" "  Toggle Voice Chat Microphone        -> Control + Option + Command + M"
+assert_contains "$CLI_HELP" "  Browser/content side-panel expansion -> Control + Command + Z"
+assert_contains "$CLI_HELP" "  Joy-Con R and SL require the microphone shortcut; SR requires the panel shortcut."
+
+assert_file_contains "$ROOT_DIR/README.md" "![Joy-Con (R) controller map](assets/joycon-r-controller-map.png?v=20260814)"
+assert_file_contains "$ROOT_DIR/README.md" "## Required ChatGPT Shortcuts"
+assert_file_contains "$ROOT_DIR/SNESChatGPTMenuBar.swift" \
+  'disabledItem("Toggle Voice Chat Microphone: Control-Option-Command-M")'
+assert_file_contains "$ROOT_DIR/SNESChatGPTMenuBar.swift" \
+  'disabledItem("Browser/content side-panel expansion: Control-Command-Z")'
 
 # Both paths must emit Ryan's exact Control-Command-Z custom shortcut.
 assert_file_contains "$ROOT_DIR/SNESChatGPTMenuBar.swift" \
