@@ -83,6 +83,14 @@ assert_contains "$MENU_MAPPINGS" "JOY.dpadUp.Stick Up=previousChat"
 assert_contains "$MENU_MAPPINGS" "JOY.dpadDown.Stick Down=nextChat"
 assert_contains "$MENU_MAPPINGS" "JOY.dpadLeft.Stick Left=toggleSidebar"
 assert_contains "$MENU_MAPPINGS" "JOY.dpadRight.Stick Right=toggleSidePanel"
+assert_contains "$MENU_MAPPINGS" "JOY.chord.12+button.15=pageDown"
+assert_contains "$MENU_MAPPINGS" "JOY.chord.12+button.16=pageUp"
+assert_contains "$MENU_MAPPINGS" "JOY.modifier.12.hat=suppressed"
+assert_contains "$MENU_MAPPINGS" "JOY.modifier.12.hatReleaseSuppression=0.5s"
+assert_not_contains "$MENU_MAPPINGS" "SNES.chord.12+button.15=pageDown"
+assert_not_contains "$MENU_MAPPINGS" "SNES.chord.12+button.16=pageUp"
+assert_not_contains "$MENU_MAPPINGS" "SNES.modifier.12.hat=suppressed"
+assert_not_contains "$MENU_MAPPINGS" "SNES.modifier.12.hatReleaseSuppression=0.5s"
 
 # CLI: preserve the complete SNES profile.
 assert_contains "$CLI_MAPPINGS" "8215.button.1=send"
@@ -114,6 +122,14 @@ assert_contains "$CLI_MAPPINGS" "8199.hat.0=toggle sidebar"
 assert_contains "$CLI_MAPPINGS" "8199.hat.2=previous chat"
 assert_contains "$CLI_MAPPINGS" "8199.hat.4=toggle side panel"
 assert_contains "$CLI_MAPPINGS" "8199.hat.6=next chat"
+assert_contains "$CLI_MAPPINGS" "8199.chord.12+button.15=page down"
+assert_contains "$CLI_MAPPINGS" "8199.chord.12+button.16=page up"
+assert_contains "$CLI_MAPPINGS" "8199.modifier.12.hat=suppressed"
+assert_contains "$CLI_MAPPINGS" "8199.modifier.12.hatReleaseSuppression=0.5s"
+assert_not_contains "$CLI_MAPPINGS" "8215.chord.12+button.15=page down"
+assert_not_contains "$CLI_MAPPINGS" "8215.chord.12+button.16=page up"
+assert_not_contains "$CLI_MAPPINGS" "8215.modifier.12.hat=suppressed"
+assert_not_contains "$CLI_MAPPINGS" "8215.modifier.12.hatReleaseSuppression=0.5s"
 assert_not_contains "$CLI_MAPPINGS" "8199.button.6=toggle Voice Chat microphone"
 assert_not_contains "$CLI_MAPPINGS" "8199.button.5=toggle Voice Chat microphone"
 assert_not_contains "$CLI_MAPPINGS" "8199.button.10=focus ChatGPT"
@@ -124,6 +140,11 @@ assert_contains "$CLI_HELP" "  R             -> Control + Option + Command + M"
 assert_contains "$CLI_HELP" "  SL            -> Command + W"
 assert_contains "$CLI_HELP" "  +             -> Command + N"
 assert_contains "$CLI_HELP" "  Home          -> focus ChatGPT"
+assert_contains "$CLI_HELP" "  Stick Click        -> focus ChatGPT for scroll mode"
+assert_contains "$CLI_HELP" "  Stick Click + R    -> Page Down"
+assert_contains "$CLI_HELP" "  Stick Click + ZR   -> Page Up"
+assert_contains "$CLI_HELP" "  Stick Click + Stick direction -> no action"
+assert_contains "$CLI_HELP" "  Stick directions remain blocked for 0.5 seconds after releasing Stick Click"
 assert_contains "$CLI_HELP" "Required ChatGPT shortcuts:"
 assert_contains "$CLI_HELP" "  Toggle Voice Chat Microphone        -> Control + Option + Command + M"
 assert_contains "$CLI_HELP" "  Browser/content side-panel expansion -> Control + Command + Z"
@@ -139,6 +160,22 @@ assert_file_contains "$ROOT_DIR/SNESChatGPTMenuBar.swift" \
   'focusThenPost(KeyStroke(keyCode: 13, flags: [.maskCommand]))'
 assert_file_contains "$ROOT_DIR/SNESChatGPTMapper.swift" \
   'focusThenPost(KeyStroke(keyCode: 13, flags: [.maskCommand]))'
+assert_file_contains "$ROOT_DIR/SNESChatGPTMenuBar.swift" \
+  'focusThenPost(KeyStroke(keyCode: 116, flags: []))'
+assert_file_contains "$ROOT_DIR/SNESChatGPTMenuBar.swift" \
+  'focusThenPost(KeyStroke(keyCode: 121, flags: []))'
+assert_file_contains "$ROOT_DIR/SNESChatGPTMapper.swift" \
+  'focusThenPost(KeyStroke(keyCode: 116, flags: []))'
+assert_file_contains "$ROOT_DIR/SNESChatGPTMapper.swift" \
+  'focusThenPost(KeyStroke(keyCode: 121, flags: []))'
+assert_file_contains "$ROOT_DIR/SNESChatGPTMenuBar.swift" \
+  'delegate?.mapperDidTrigger("Scroll Mode")'
+assert_file_contains "$ROOT_DIR/SNESChatGPTMapper.swift" \
+  'print("Action: focus ChatGPT for scroll mode")'
+assert_file_contains "$ROOT_DIR/SNESChatGPTMenuBar.swift" \
+  'private let modifierReleaseSuppressionInterval: TimeInterval = 0.5'
+assert_file_contains "$ROOT_DIR/SNESChatGPTMapper.swift" \
+  'private let modifierReleaseSuppressionInterval: TimeInterval = 0.5'
 assert_file_contains "$ROOT_DIR/SNESChatGPTMenuBar.swift" \
   'private let joyConSLCommandWMigrationKey = "migration.joyConSLCommandW"'
 

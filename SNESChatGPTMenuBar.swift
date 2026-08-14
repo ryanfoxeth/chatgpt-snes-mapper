@@ -11,6 +11,7 @@ private let chatGPTPath = "/Applications/ChatGPT.app"
 private let defaultPresetName = "ChatGPT Voice Macropad"
 private let controllerSelectionStorageKey = "controllerSelection"
 private let joyConSLCommandWMigrationKey = "migration.joyConSLCommandW"
+private let modifierReleaseSuppressionInterval: TimeInterval = 0.5
 
 private enum Action: String, CaseIterable {
     case none
@@ -24,6 +25,8 @@ private enum Action: String, CaseIterable {
     case expandBrowserContentPanel
     case previousChat
     case nextChat
+    case pageUp
+    case pageDown
     case toggleSidebar
     case toggleSidePanel
     case newChat
@@ -54,6 +57,10 @@ private enum Action: String, CaseIterable {
             return "Previous Chat"
         case .nextChat:
             return "Next Chat"
+        case .pageUp:
+            return "Page Up"
+        case .pageDown:
+            return "Page Down"
         case .toggleSidebar:
             return "Toggle Sidebar"
         case .toggleSidePanel:
@@ -91,6 +98,8 @@ private enum Action: String, CaseIterable {
             return "\(displayName) (⇧⌘[)"
         case .nextChat:
             return "\(displayName) (⇧⌘])"
+        case .pageUp, .pageDown:
+            return displayName
         case .toggleSidebar:
             return "\(displayName) (⌘B)"
         case .toggleSidePanel:
@@ -283,6 +292,8 @@ private struct ControllerProfile {
     let lockButtonUsage: UInt32
     let controlNames: [Control: String]
     let defaultActionOverrides: [Control: Action]
+    let buttonModifierUsage: UInt32?
+    let modifiedButtonActions: [UInt32: Action]
 
     func defaultAction(for control: Control) -> Action {
         defaultActionOverrides[control] ?? control.defaultAction
@@ -329,7 +340,9 @@ private let snesProfile = ControllerProfile(
     hatControls: hatControls,
     lockButtonUsage: 16,
     controlNames: [:],
-    defaultActionOverrides: [:]
+    defaultActionOverrides: [:],
+    buttonModifierUsage: nil,
+    modifiedButtonActions: [:]
 )
 
 // Hardware-calibrated on a Nintendo Switch Joy-Con (R) connected over
@@ -375,6 +388,11 @@ private let joyConRightProfile = ControllerProfile(
         .r: .expandBrowserContentPanel, // SR
         .zl: .toggleVoiceMic,           // R
         .start: .newChat                // +
+    ],
+    buttonModifierUsage: 12, // Stick click
+    modifiedButtonActions: [
+        15: .pageDown, // R
+        16: .pageUp    // ZR
     ]
 )
 
@@ -389,6 +407,13 @@ private func printDefaultMappingsAndExit() -> Never {
             let name = profile.controlNames[control] ?? control.displayName
             let action = profile.defaultAction(for: control)
             print("\(profile.statusLabel).\(control.rawValue).\(name)=\(action.rawValue)")
+        }
+        if let modifierUsage = profile.buttonModifierUsage {
+            for (usage, action) in profile.modifiedButtonActions.sorted(by: { $0.key < $1.key }) {
+                print("\(profile.statusLabel).chord.\(modifierUsage)+button.\(usage)=\(action.rawValue)")
+            }
+            print("\(profile.statusLabel).modifier.\(modifierUsage).hat=suppressed")
+            print("\(profile.statusLabel).modifier.\(modifierUsage).hatReleaseSuppression=0.5s")
         }
     }
     exit(EXIT_SUCCESS)
@@ -436,6 +461,7 @@ private final class ControllerMapper {
     private var mappingsByProductID: [Int: [Control: Action]] = [:]
     private var lastButtonValues: [InputKey: Bool] = [:]
     private var lastHatValues: [Int: Int] = [:]
+    private var hatSuppressionUntilByDeviceID: [Int: Date] = [:]
     private var heldButtons: [InputKey: Action] = [:]
     private var connectedControllerCounts: [Int: Int] = [:]
     private(set) var controllerSelection: ControllerSelection = .automatic
@@ -508,6 +534,17 @@ private final class ControllerMapper {
 
     func displayName(for control: Control) -> String {
         preferredProfile.controlNames[control] ?? control.displayName
+    }
+
+    var additionalMapLines: [String] {
+        guard preferredProfile.productID == joyConRightProductID else { return [] }
+        return [
+            "Stick Click: Focus ChatGPT / Scroll Mode",
+            "Stick Click + R: Page Down",
+            "Stick Click + ZR: Page Up",
+            "Stick Click + Stick Direction: No Action",
+            "Stick directions resume 0.5s after release"
+        ]
     }
 
     var statusLabel: String {
@@ -707,6 +744,7 @@ private final class ControllerMapper {
     private func clearInputState(for deviceID: Int) {
         lastButtonValues = lastButtonValues.filter { $0.key.deviceID != deviceID }
         lastHatValues.removeValue(forKey: deviceID)
+        hatSuppressionUntilByDeviceID.removeValue(forKey: deviceID)
     }
 
     private func inputValue(_ value: IOHIDValue) {
@@ -736,12 +774,37 @@ private final class ControllerMapper {
 
         guard isPressed != wasPressed else { return }
 
+        if !isPressed,
+           let modifierUsage = profile.buttonModifierUsage,
+           usage == modifierUsage {
+            hatSuppressionUntilByDeviceID[deviceID] = Date().addingTimeInterval(
+                modifierReleaseSuppressionInterval
+            )
+        }
+
+        if isEnabled,
+           isPressed,
+           let modifierUsage = profile.buttonModifierUsage,
+           lastButtonValues[InputKey(deviceID: deviceID, usage: modifierUsage)] == true,
+           let modifiedAction = profile.modifiedButtonActions[usage] {
+            trigger(modifiedAction)
+            return
+        }
+
         if isPressed, usage == profile.lockButtonUsage {
             isEnabled.toggle()
             return
         }
 
-        guard isEnabled, let control = profile.buttonControls[usage] else { return }
+        guard isEnabled else { return }
+        if isPressed,
+           let modifierUsage = profile.buttonModifierUsage,
+           usage == modifierUsage {
+            delegate?.mapperDidTrigger("Scroll Mode")
+            focusChatGPT()
+            return
+        }
+        guard let control = profile.buttonControls[usage] else { return }
 
         let action = action(for: control, profile: profile)
         guard action != .none else { return }
@@ -766,7 +829,18 @@ private final class ControllerMapper {
         guard value != lastHatValues[deviceID] else { return }
         lastHatValues[deviceID] = value
 
-        guard isEnabled, let control = profile.hatControls[value] else { return }
+        guard isEnabled else { return }
+        if let modifierUsage = profile.buttonModifierUsage,
+           lastButtonValues[InputKey(deviceID: deviceID, usage: modifierUsage)] == true {
+            return
+        }
+        if let suppressionUntil = hatSuppressionUntilByDeviceID[deviceID] {
+            if Date() < suppressionUntil {
+                return
+            }
+            hatSuppressionUntilByDeviceID.removeValue(forKey: deviceID)
+        }
+        guard let control = profile.hatControls[value] else { return }
         trigger(action(for: control, profile: profile))
     }
 
@@ -804,6 +878,10 @@ private final class ControllerMapper {
             focusThenPost(KeyStroke(keyCode: 33, flags: [.maskShift, .maskCommand]))
         case .nextChat:
             focusThenPost(KeyStroke(keyCode: 30, flags: [.maskShift, .maskCommand]))
+        case .pageUp:
+            focusThenPost(KeyStroke(keyCode: 116, flags: []))
+        case .pageDown:
+            focusThenPost(KeyStroke(keyCode: 121, flags: []))
         case .toggleSidebar:
             focusThenPost(KeyStroke(keyCode: 11, flags: [.maskCommand]))
         case .toggleSidePanel:
@@ -971,6 +1049,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
         menu.addItem(disabledItem("Current Map"))
         for control in Control.menuOrder {
             menu.addItem(disabledItem("\(mapper.displayName(for: control)): \(mapper.action(for: control).menuTitle)"))
+        }
+        for line in mapper.additionalMapLines {
+            menu.addItem(disabledItem(line))
         }
         menu.addItem(.separator())
         menu.addItem(quitItem)

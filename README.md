@@ -49,6 +49,12 @@ The right Joy-Con has profile-specific defaults while leaving every SNES mapping
 | Stick Down | Next chat (`Shift + Command + ]`) |
 | Stick Left | Toggle the sidebar (`Command + B`) |
 | Stick Right | Toggle the side/review panel (`Option + Command + B`) |
+| Stick Click | Focus ChatGPT and enter scroll mode while held |
+| Hold Stick Click + R | Scroll the last-active chat or browser content one page down (`Page Down`) |
+| Hold Stick Click + ZR | Scroll the last-active chat or browser content one page up (`Page Up`) |
+| Hold Stick Click + any Stick direction | No action; normal stick navigation is suppressed until Stick Click is released |
+
+After Stick Click is released, Joy-Con stick directions remain suppressed for 0.5 seconds. This prevents an already-tilted stick from accidentally triggering chat or panel navigation during release.
 
 The Joy-Con profile was calibrated against real HID events from a Bluetooth-connected Nintendo Switch Joy-Con (R). Its vertical stick orientation uses a different hat-switch rotation than the SNES controller, which the mapper handles per device.
 

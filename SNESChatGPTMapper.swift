@@ -9,6 +9,7 @@ private let joyConRightProductID = 0x2007
 private let chatGPTBundleID = "com.openai.codex"
 private let chatGPTPath = "/Applications/ChatGPT.app"
 private let defaultPresetName = "ChatGPT Voice Macropad"
+private let modifierReleaseSuppressionInterval: TimeInterval = 0.5
 
 private enum Mode {
     case normal
@@ -26,6 +27,8 @@ private enum Action: String {
     case clearInput = "clear input"
     case previousChat = "previous chat"
     case nextChat = "next chat"
+    case pageUp = "page up"
+    case pageDown = "page down"
     case toggleSidebar = "toggle sidebar"
     case toggleSidePanel = "toggle side panel"
     case newChat = "new chat"
@@ -49,6 +52,8 @@ private struct ControllerProfile {
     let heldButtonStrokes: [UInt32: KeyStroke]
     let lockButtonUsage: UInt32
     let hatActions: [Int: Action]
+    let buttonModifierUsage: UInt32?
+    let modifiedButtonActions: [UInt32: Action]
 }
 
 private let snesProfile = ControllerProfile(
@@ -73,7 +78,9 @@ private let snesProfile = ControllerProfile(
         2: .toggleSidePanel,
         4: .nextChat,
         6: .toggleSidebar
-    ]
+    ],
+    buttonModifierUsage: nil,
+    modifiedButtonActions: [:]
 )
 
 // Hardware-calibrated on a Nintendo Switch Joy-Con (R) connected over
@@ -101,6 +108,11 @@ private let joyConRightProfile = ControllerProfile(
         4: .toggleSidePanel,
         6: .nextChat,
         0: .toggleSidebar
+    ],
+    buttonModifierUsage: 12, // Stick click
+    modifiedButtonActions: [
+        15: .pageDown, // R
+        16: .pageUp    // ZR
     ]
 )
 
@@ -121,6 +133,13 @@ private func printDefaultMappingsAndExit() -> Never {
         for (value, action) in profile.hatActions.sorted(by: { $0.key < $1.key }) {
             print("\(profile.productID).hat.\(value)=\(action.rawValue)")
         }
+        if let modifierUsage = profile.buttonModifierUsage {
+            for (usage, action) in profile.modifiedButtonActions.sorted(by: { $0.key < $1.key }) {
+                print("\(profile.productID).chord.\(modifierUsage)+button.\(usage)=\(action.rawValue)")
+            }
+            print("\(profile.productID).modifier.\(modifierUsage).hat=suppressed")
+            print("\(profile.productID).modifier.\(modifierUsage).hatReleaseSuppression=0.5s")
+        }
     }
     exit(EXIT_SUCCESS)
 }
@@ -130,6 +149,7 @@ private final class Mapper {
     private let manager: IOHIDManager
     private var lastButtonValues: [InputKey: Bool] = [:]
     private var lastHatValues: [Int: Int] = [:]
+    private var hatSuppressionUntilByDeviceID: [Int: Date] = [:]
     private var heldButtons: [InputKey: KeyStroke] = [:]
     private var lastActionTimes: [Action: Date] = [:]
     private var statusSound: NSSound?
@@ -247,13 +267,32 @@ private final class Mapper {
             lastButtonValues[inputKey] = isPressed
 
             if isPressed != wasPressed {
+                if !isPressed,
+                   let modifierUsage = profile.buttonModifierUsage,
+                   usage == modifierUsage {
+                    hatSuppressionUntilByDeviceID[deviceID] = Date().addingTimeInterval(
+                        modifierReleaseSuppressionInterval
+                    )
+                }
                 if mode == .monitor {
                     print("\(profile.name) button usage=\(usage) \(isPressed ? "down" : "up")")
                     fflush(stdout)
+                } else if isEnabled,
+                          isPressed,
+                          let modifierUsage = profile.buttonModifierUsage,
+                          lastButtonValues[InputKey(deviceID: deviceID, usage: modifierUsage)] == true,
+                          let modifiedAction = profile.modifiedButtonActions[usage] {
+                    trigger(modifiedAction)
                 } else if isPressed, usage == profile.lockButtonUsage {
                     toggleEnabled()
                 } else if !isEnabled {
                     return
+                } else if isPressed,
+                          let modifierUsage = profile.buttonModifierUsage,
+                          usage == modifierUsage {
+                    print("Action: focus ChatGPT for scroll mode")
+                    fflush(stdout)
+                    focusChatGPT()
                 } else if let stroke = profile.heldButtonStrokes[usage] {
                     if isPressed {
                         beginHold(input: inputKey, stroke: stroke)
@@ -293,6 +332,7 @@ private final class Mapper {
     private func clearInputState(for deviceID: Int) {
         lastButtonValues = lastButtonValues.filter { $0.key.deviceID != deviceID }
         lastHatValues.removeValue(forKey: deviceID)
+        hatSuppressionUntilByDeviceID.removeValue(forKey: deviceID)
     }
 
     private func handleHatSwitch(
@@ -303,7 +343,18 @@ private final class Mapper {
         let value = Int(rawValue)
         guard value != lastHatValues[deviceID] else { return }
         lastHatValues[deviceID] = value
-        guard isEnabled, let action = profile.hatActions[value] else { return }
+        guard isEnabled else { return }
+        if let modifierUsage = profile.buttonModifierUsage,
+           lastButtonValues[InputKey(deviceID: deviceID, usage: modifierUsage)] == true {
+            return
+        }
+        if let suppressionUntil = hatSuppressionUntilByDeviceID[deviceID] {
+            if Date() < suppressionUntil {
+                return
+            }
+            hatSuppressionUntilByDeviceID.removeValue(forKey: deviceID)
+        }
+        guard let action = profile.hatActions[value] else { return }
         trigger(action)
     }
 
@@ -342,6 +393,10 @@ private final class Mapper {
             focusThenPost(KeyStroke(keyCode: 33, flags: [.maskShift, .maskCommand]))
         case .nextChat:
             focusThenPost(KeyStroke(keyCode: 30, flags: [.maskShift, .maskCommand]))
+        case .pageUp:
+            focusThenPost(KeyStroke(keyCode: 116, flags: []))
+        case .pageDown:
+            focusThenPost(KeyStroke(keyCode: 121, flags: []))
         case .toggleSidebar:
             focusThenPost(KeyStroke(keyCode: 11, flags: [.maskCommand]))
         case .toggleSidePanel:
@@ -490,6 +545,11 @@ private func printUsageAndExit() -> Never {
       Stick Up/Down -> previous/next chat
       Stick Left    -> Command + B
       Stick Right   -> Option + Command + B
+      Stick Click        -> focus ChatGPT for scroll mode
+      Stick Click + R    -> Page Down
+      Stick Click + ZR   -> Page Up
+      Stick Click + Stick direction -> no action
+      Stick directions remain blocked for 0.5 seconds after releasing Stick Click
 
     Required ChatGPT shortcuts:
       Toggle Voice Chat Microphone        -> Control + Option + Command + M
