@@ -73,7 +73,7 @@ assert_contains "$MENU_MAPPINGS" "JOY.a.A=holdDictation"
 assert_contains "$MENU_MAPPINGS" "JOY.b.B=send"
 assert_contains "$MENU_MAPPINGS" "JOY.x.X=toggleVoiceChat"
 assert_contains "$MENU_MAPPINGS" "JOY.y.Y=clearInput"
-assert_contains "$MENU_MAPPINGS" "JOY.l.SL=toggleVoiceMic"
+assert_contains "$MENU_MAPPINGS" "JOY.l.SL=closeTabOrWindow"
 assert_contains "$MENU_MAPPINGS" "JOY.r.SR=expandBrowserContentPanel"
 assert_contains "$MENU_MAPPINGS" "JOY.zl.R=toggleVoiceMic"
 assert_contains "$MENU_MAPPINGS" "JOY.zr.ZR=lockUnlock"
@@ -105,7 +105,7 @@ assert_contains "$CLI_MAPPINGS" "8199.button.1=hold dictation"
 assert_contains "$CLI_MAPPINGS" "8199.button.2=toggle Voice Chat"
 assert_contains "$CLI_MAPPINGS" "8199.button.3=send"
 assert_contains "$CLI_MAPPINGS" "8199.button.4=clear input"
-assert_contains "$CLI_MAPPINGS" "8199.button.5=toggle Voice Chat microphone"
+assert_contains "$CLI_MAPPINGS" "8199.button.5=close current tab/window"
 assert_contains "$CLI_MAPPINGS" "8199.button.6=expand browser/content panel"
 assert_contains "$CLI_MAPPINGS" "8199.button.10=new chat"
 assert_contains "$CLI_MAPPINGS" "8199.button.13=focus ChatGPT"
@@ -115,17 +115,19 @@ assert_contains "$CLI_MAPPINGS" "8199.hat.2=previous chat"
 assert_contains "$CLI_MAPPINGS" "8199.hat.4=toggle side panel"
 assert_contains "$CLI_MAPPINGS" "8199.hat.6=next chat"
 assert_not_contains "$CLI_MAPPINGS" "8199.button.6=toggle Voice Chat microphone"
+assert_not_contains "$CLI_MAPPINGS" "8199.button.5=toggle Voice Chat microphone"
 assert_not_contains "$CLI_MAPPINGS" "8199.button.10=focus ChatGPT"
 assert_not_contains "$CLI_MAPPINGS" "8199.button.15=new chat"
 
 assert_contains "$CLI_HELP" "  SR            -> Control + Command + Z"
 assert_contains "$CLI_HELP" "  R             -> Control + Option + Command + M"
+assert_contains "$CLI_HELP" "  SL            -> Command + W"
 assert_contains "$CLI_HELP" "  +             -> Command + N"
 assert_contains "$CLI_HELP" "  Home          -> focus ChatGPT"
 assert_contains "$CLI_HELP" "Required ChatGPT shortcuts:"
 assert_contains "$CLI_HELP" "  Toggle Voice Chat Microphone        -> Control + Option + Command + M"
 assert_contains "$CLI_HELP" "  Browser/content side-panel expansion -> Control + Command + Z"
-assert_contains "$CLI_HELP" "  Joy-Con R and SL require the microphone shortcut; SR requires the panel shortcut."
+assert_contains "$CLI_HELP" "  Joy-Con R requires the microphone shortcut; SR requires the panel shortcut."
 
 assert_file_contains "$ROOT_DIR/README.md" "![Joy-Con (R) controller map](assets/joycon-r-controller-map.png?v=20260814)"
 assert_file_contains "$ROOT_DIR/README.md" "## Required ChatGPT Shortcuts"
@@ -133,6 +135,12 @@ assert_file_contains "$ROOT_DIR/SNESChatGPTMenuBar.swift" \
   'disabledItem("Toggle Voice Chat Microphone: Control-Option-Command-M")'
 assert_file_contains "$ROOT_DIR/SNESChatGPTMenuBar.swift" \
   'disabledItem("Browser/content side-panel expansion: Control-Command-Z")'
+assert_file_contains "$ROOT_DIR/SNESChatGPTMenuBar.swift" \
+  'focusThenPost(KeyStroke(keyCode: 13, flags: [.maskCommand]))'
+assert_file_contains "$ROOT_DIR/SNESChatGPTMapper.swift" \
+  'focusThenPost(KeyStroke(keyCode: 13, flags: [.maskCommand]))'
+assert_file_contains "$ROOT_DIR/SNESChatGPTMenuBar.swift" \
+  'private let joyConSLCommandWMigrationKey = "migration.joyConSLCommandW"'
 
 # Both paths must emit Ryan's exact Control-Command-Z custom shortcut.
 assert_file_contains "$ROOT_DIR/SNESChatGPTMenuBar.swift" \

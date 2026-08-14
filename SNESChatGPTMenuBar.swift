@@ -10,6 +10,7 @@ private let chatGPTBundleID = "com.openai.codex"
 private let chatGPTPath = "/Applications/ChatGPT.app"
 private let defaultPresetName = "ChatGPT Voice Macropad"
 private let controllerSelectionStorageKey = "controllerSelection"
+private let joyConSLCommandWMigrationKey = "migration.joyConSLCommandW"
 
 private enum Action: String, CaseIterable {
     case none
@@ -19,6 +20,7 @@ private enum Action: String, CaseIterable {
     case clearInput
     case toggleVoiceChat
     case toggleVoiceMic
+    case closeTabOrWindow
     case expandBrowserContentPanel
     case previousChat
     case nextChat
@@ -44,6 +46,8 @@ private enum Action: String, CaseIterable {
             return "Start/Stop Voice Chat"
         case .toggleVoiceMic:
             return "Voice Chat Mic Toggle"
+        case .closeTabOrWindow:
+            return "Close Tab / Window"
         case .expandBrowserContentPanel:
             return "Expand Browser/Content Panel"
         case .previousChat:
@@ -79,6 +83,8 @@ private enum Action: String, CaseIterable {
             return "\(displayName) (^⇧V)"
         case .toggleVoiceMic:
             return "\(displayName) (^⌥⌘M)"
+        case .closeTabOrWindow:
+            return "\(displayName) (⌘W)"
         case .expandBrowserContentPanel:
             return "\(displayName) (^⌘Z)"
         case .previousChat:
@@ -110,6 +116,7 @@ private enum Action: String, CaseIterable {
         .clearInput,
         .toggleVoiceChat,
         .toggleVoiceMic,
+        .closeTabOrWindow,
         .expandBrowserContentPanel,
         .previousChat,
         .nextChat,
@@ -364,6 +371,7 @@ private let joyConRightProfile = ControllerProfile(
         .dpadRight: "Stick Right"
     ],
     defaultActionOverrides: [
+        .l: .closeTabOrWindow,          // SL
         .r: .expandBrowserContentPanel, // SR
         .zl: .toggleVoiceMic,           // R
         .start: .newChat                // +
@@ -590,6 +598,7 @@ private final class ControllerMapper {
 
     private func loadSavedMappings() {
         mappingsByProductID.removeAll()
+        let needsJoyConSLMigration = !UserDefaults.standard.bool(forKey: joyConSLCommandWMigrationKey)
         for profile in controllerProfiles.values {
             var profileMappings = [Control: Action].defaultMappings(for: profile)
             for control in Control.allCases where control.isConfigurable {
@@ -603,9 +612,24 @@ private final class ControllerMapper {
                       control.choices.contains(action) else {
                     continue
                 }
+                if needsJoyConSLMigration,
+                   profile.productID == joyConRightProductID,
+                   control == .l,
+                   action == .toggleVoiceMic {
+                    let replacement = Action.closeTabOrWindow
+                    profileMappings[control] = replacement
+                    UserDefaults.standard.set(
+                        replacement.rawValue,
+                        forKey: control.storageKey(productID: profile.productID)
+                    )
+                    continue
+                }
                 profileMappings[control] = action
             }
             mappingsByProductID[profile.productID] = profileMappings
+        }
+        if needsJoyConSLMigration {
+            UserDefaults.standard.set(true, forKey: joyConSLCommandWMigrationKey)
         }
     }
 
@@ -772,6 +796,8 @@ private final class ControllerMapper {
             focusThenPost(KeyStroke(keyCode: 9, flags: [.maskControl, .maskShift]))
         case .toggleVoiceMic:
             focusThenPost(KeyStroke(keyCode: 46, flags: [.maskControl, .maskAlternate, .maskCommand]))
+        case .closeTabOrWindow:
+            focusThenPost(KeyStroke(keyCode: 13, flags: [.maskCommand]))
         case .expandBrowserContentPanel:
             focusThenPost(KeyStroke(keyCode: 6, flags: [.maskControl, .maskCommand]))
         case .previousChat:
@@ -983,7 +1009,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
         submenu.addItem(disabledItem("Toggle Voice Chat Microphone: Control-Option-Command-M"))
         submenu.addItem(disabledItem("Browser/content side-panel expansion: Control-Command-Z"))
         submenu.addItem(.separator())
-        submenu.addItem(disabledItem("Joy-Con R / SL use the microphone shortcut"))
+        submenu.addItem(disabledItem("Joy-Con R uses the microphone shortcut"))
         submenu.addItem(disabledItem("Joy-Con SR uses the panel shortcut"))
         item.submenu = submenu
         return item

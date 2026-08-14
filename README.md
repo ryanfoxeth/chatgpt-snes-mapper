@@ -41,7 +41,7 @@ The right Joy-Con has profile-specific defaults while leaving every SNES mapping
 | B | Send message (`Return`) |
 | X | Start or stop Voice Chat (`Control + Shift + V`) |
 | Y | Clear the current input (`Command + A`, then `Delete`) |
-| SL | Toggle Voice Chat microphone (`Control + Option + Command + M`) |
+| SL | Close the current tab or window (`Command + W`) |
 | SR | Expand the browser/content panel with Ryan's custom shortcut (`Control + Command + Z`) |
 | R | Toggle Voice Chat microphone (`Control + Option + Command + M`) |
 | ZR | Lock or unlock the mapper |
@@ -112,12 +112,12 @@ Check the installed app's current Accessibility status directly:
 
 ## Required ChatGPT Shortcuts
 
-Before using the Joy-Con microphone and SR actions, open ChatGPT Settings > Keyboard shortcuts and assign:
+Before using the Joy-Con R and SR actions, open ChatGPT Settings > Keyboard shortcuts and assign:
 
 - `Toggle Voice Chat Microphone` to `Control + Option + Command + M`
 - The browser/content side-panel expansion action to `Control + Command + Z` (Ryan's custom shortcut)
 
-These are prerequisites: Joy-Con R and SL use the microphone shortcut, and Joy-Con SR uses the browser/content side-panel shortcut.
+These are prerequisites: Joy-Con R uses the microphone shortcut, and Joy-Con SR uses the browser/content side-panel shortcut. Joy-Con SL sends the standard macOS `Command + W` shortcut and requires no ChatGPT shortcut setting.
 
 ## macOS Permissions
 

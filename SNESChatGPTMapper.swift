@@ -19,6 +19,7 @@ private enum Action: String {
     case focusChatGPT = "focus ChatGPT"
     case toggleVoiceChat = "toggle Voice Chat"
     case toggleVoiceMic = "toggle Voice Chat microphone"
+    case closeTabOrWindow = "close current tab/window"
     case expandBrowserContentPanel = "expand browser/content panel"
     case dictation = "dictation"
     case send = "send"
@@ -85,7 +86,7 @@ private let joyConRightProfile = ControllerProfile(
         3: .send,            // B
         2: .toggleVoiceChat, // X
         4: .clearInput,      // Y
-        5: .toggleVoiceMic,  // SL
+        5: .closeTabOrWindow, // SL
         6: .expandBrowserContentPanel, // SR
         15: .toggleVoiceMic,            // R
         10: .newChat,                   // +
@@ -326,6 +327,8 @@ private final class Mapper {
             // Assign this in ChatGPT Keyboard Shortcuts to:
             // Toggle Voice Chat microphone = Control + Option + Command + M
             focusThenPost(KeyStroke(keyCode: 46, flags: [.maskControl, .maskAlternate, .maskCommand]))
+        case .closeTabOrWindow:
+            focusThenPost(KeyStroke(keyCode: 13, flags: [.maskCommand]))
         case .expandBrowserContentPanel:
             // Ryan's custom shortcut for expanding the browser/content panel.
             focusThenPost(KeyStroke(keyCode: 6, flags: [.maskControl, .maskCommand]))
@@ -480,7 +483,7 @@ private func printUsageAndExit() -> Never {
       B             -> Return
       X             -> Control + Shift + V
       Y             -> Command + A, Delete
-      SL            -> Control + Option + Command + M
+      SL            -> Command + W
       SR            -> Control + Command + Z
       R             -> Control + Option + Command + M
       ZR            -> lock/unlock mapper
@@ -491,7 +494,7 @@ private func printUsageAndExit() -> Never {
     Required ChatGPT shortcuts:
       Toggle Voice Chat Microphone        -> Control + Option + Command + M
       Browser/content side-panel expansion -> Control + Command + Z
-      Joy-Con R and SL require the microphone shortcut; SR requires the panel shortcut.
+      Joy-Con R requires the microphone shortcut; SR requires the panel shortcut.
 
     Default preset: \(defaultPresetName)
     """)
