@@ -3,11 +3,13 @@ import ApplicationServices
 import Foundation
 import IOKit.hid
 
-private let vendorID = 0x057E
-private let productID = 0x2017
+private let nintendoVendorID = 0x057E
+private let snesProductID = 0x2017
+private let joyConRightProductID = 0x2007
 private let chatGPTBundleID = "com.openai.codex"
 private let chatGPTPath = "/Applications/ChatGPT.app"
 private let defaultPresetName = "ChatGPT Voice Macropad"
+private let controllerSelectionStorageKey = "controllerSelection"
 
 private enum Action: String, CaseIterable {
     case none
@@ -17,6 +19,7 @@ private enum Action: String, CaseIterable {
     case clearInput
     case toggleVoiceChat
     case toggleVoiceMic
+    case expandBrowserContentPanel
     case previousChat
     case nextChat
     case toggleSidebar
@@ -41,6 +44,8 @@ private enum Action: String, CaseIterable {
             return "Start/Stop Voice Chat"
         case .toggleVoiceMic:
             return "Voice Chat Mic Toggle"
+        case .expandBrowserContentPanel:
+            return "Expand Browser/Content Panel"
         case .previousChat:
             return "Previous Chat"
         case .nextChat:
@@ -74,6 +79,8 @@ private enum Action: String, CaseIterable {
             return "\(displayName) (^⇧V)"
         case .toggleVoiceMic:
             return "\(displayName) (^⌥⌘M)"
+        case .expandBrowserContentPanel:
+            return "\(displayName) (^⌘Z)"
         case .previousChat:
             return "\(displayName) (⇧⌘[)"
         case .nextChat:
@@ -103,6 +110,7 @@ private enum Action: String, CaseIterable {
         .clearInput,
         .toggleVoiceChat,
         .toggleVoiceMic,
+        .expandBrowserContentPanel,
         .previousChat,
         .nextChat,
         .toggleSidebar,
@@ -209,8 +217,12 @@ private enum Control: String, CaseIterable {
         isHatControl ? Action.hatChoices : Action.buttonChoices
     }
 
-    var storageKey: String {
+    var legacyStorageKey: String {
         "mapping.\(rawValue)"
+    }
+
+    func storageKey(productID: Int) -> String {
+        "mapping.\(productID).\(rawValue)"
     }
 
     static let menuOrder: [Control] = [
@@ -250,9 +262,133 @@ private let hatControls: [Int: Control] = [
     6: .dpadLeft
 ]
 
+private struct InputKey: Hashable {
+    let deviceID: Int
+    let usage: UInt32
+}
+
+private struct ControllerProfile {
+    let productID: Int
+    let name: String
+    let statusLabel: String
+    let buttonControls: [UInt32: Control]
+    let hatControls: [Int: Control]
+    let lockButtonUsage: UInt32
+    let controlNames: [Control: String]
+    let defaultActionOverrides: [Control: Action]
+
+    func defaultAction(for control: Control) -> Action {
+        defaultActionOverrides[control] ?? control.defaultAction
+    }
+}
+
+private enum ControllerSelection: String, CaseIterable {
+    case automatic
+    case snes
+    case joyConRight
+
+    var displayName: String {
+        switch self {
+        case .automatic:
+            return "Automatic"
+        case .snes:
+            return "SNES Controller"
+        case .joyConRight:
+            return "Joy-Con (R)"
+        }
+    }
+
+    var productID: Int? {
+        switch self {
+        case .automatic:
+            return nil
+        case .snes:
+            return snesProductID
+        case .joyConRight:
+            return joyConRightProductID
+        }
+    }
+
+    func accepts(_ profile: ControllerProfile) -> Bool {
+        productID == nil || productID == profile.productID
+    }
+}
+
+private let snesProfile = ControllerProfile(
+    productID: snesProductID,
+    name: "Nintendo SNES Controller",
+    statusLabel: "SNES",
+    buttonControls: buttonControls,
+    hatControls: hatControls,
+    lockButtonUsage: 16,
+    controlNames: [:],
+    defaultActionOverrides: [:]
+)
+
+// Hardware-calibrated on a Nintendo Switch Joy-Con (R) connected over
+// Bluetooth to macOS. Its vertical stick orientation rotates the hat values
+// 90 degrees from the SNES controller.
+private let joyConRightProfile = ControllerProfile(
+    productID: joyConRightProductID,
+    name: "Nintendo Switch Joy-Con (R)",
+    statusLabel: "JOY",
+    buttonControls: [
+        1: .a,
+        3: .b,
+        2: .x,
+        4: .y,
+        5: .l,      // SL
+        6: .r,      // SR
+        15: .zl,    // R
+        16: .zr,    // ZR
+        13: .select, // Home
+        10: .start   // +
+    ],
+    hatControls: [
+        2: .dpadUp,
+        4: .dpadRight,
+        6: .dpadDown,
+        0: .dpadLeft
+    ],
+    lockButtonUsage: 16,
+    controlNames: [
+        .l: "SL",
+        .r: "SR",
+        .zl: "R",
+        .zr: "ZR",
+        .select: "Home",
+        .start: "+",
+        .dpadUp: "Stick Up",
+        .dpadDown: "Stick Down",
+        .dpadLeft: "Stick Left",
+        .dpadRight: "Stick Right"
+    ],
+    defaultActionOverrides: [
+        .r: .expandBrowserContentPanel, // SR
+        .zl: .toggleVoiceMic,           // R
+        .start: .newChat                // +
+    ]
+)
+
+private let controllerProfiles: [Int: ControllerProfile] = [
+    snesProfile.productID: snesProfile,
+    joyConRightProfile.productID: joyConRightProfile
+]
+
+private func printDefaultMappingsAndExit() -> Never {
+    for profile in controllerProfiles.values.sorted(by: { $0.productID < $1.productID }) {
+        for control in Control.menuOrder {
+            let name = profile.controlNames[control] ?? control.displayName
+            let action = profile.defaultAction(for: control)
+            print("\(profile.statusLabel).\(control.rawValue).\(name)=\(action.rawValue)")
+        }
+    }
+    exit(EXIT_SUCCESS)
+}
+
 private extension Dictionary where Key == Control, Value == Action {
-    static var defaultMappings: [Control: Action] {
-        Dictionary(uniqueKeysWithValues: Control.allCases.map { ($0, $0.defaultAction) })
+    static func defaultMappings(for profile: ControllerProfile) -> [Control: Action] {
+        Dictionary(uniqueKeysWithValues: Control.allCases.map { ($0, profile.defaultAction(for: $0)) })
     }
 }
 
@@ -289,27 +425,31 @@ private final class ControllerMapper {
     }
 
     private let manager: IOHIDManager
-    private var mappings = [Control: Action].defaultMappings
-    private var lastButtonValues: [UInt32: Bool] = [:]
-    private var lastHatValue = 8
-    private var heldButtons: [UInt32: Action] = [:]
+    private var mappingsByProductID: [Int: [Control: Action]] = [:]
+    private var lastButtonValues: [InputKey: Bool] = [:]
+    private var lastHatValues: [Int: Int] = [:]
+    private var heldButtons: [InputKey: Action] = [:]
+    private var connectedControllerCounts: [Int: Int] = [:]
+    private(set) var controllerSelection: ControllerSelection = .automatic
     private var lastActionTimes: [Action: Date] = [:]
     private var statusSound: NSSound?
     private let actionCooldown: TimeInterval = 0.18
-    private let lockToggleButtonUsage: UInt32 = 16
 
     init() {
         self.manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
+        loadControllerSelection()
         loadSavedMappings()
     }
 
     func start() {
-        let matching: [String: Any] = [
-            kIOHIDVendorIDKey as String: vendorID,
-            kIOHIDProductIDKey as String: productID
-        ]
+        let matching = controllerProfiles.keys.sorted().map { productID in
+            [
+                kIOHIDVendorIDKey as String: nintendoVendorID,
+                kIOHIDProductIDKey as String: productID
+            ]
+        }
 
-        IOHIDManagerSetDeviceMatching(manager, matching as CFDictionary)
+        IOHIDManagerSetDeviceMatchingMultiple(manager, matching as CFArray)
 
         let context = Unmanaged.passUnretained(self).toOpaque()
         IOHIDManagerRegisterDeviceMatchingCallback(manager, { context, _, _, device in
@@ -349,27 +489,76 @@ private final class ControllerMapper {
         delegate?.mapperPermissionChanged()
     }
 
-    func action(for control: Control) -> Action {
+    func action(for control: Control, profile: ControllerProfile? = nil) -> Action {
         if control == .zr {
             return .lockUnlock
         }
-        return mappings[control] ?? control.defaultAction
+        let resolvedProfile = profile ?? preferredProfile
+        return mappingsByProductID[resolvedProfile.productID]?[control]
+            ?? resolvedProfile.defaultAction(for: control)
+    }
+
+    func displayName(for control: Control) -> String {
+        preferredProfile.controlNames[control] ?? control.displayName
+    }
+
+    var statusLabel: String {
+        switch controllerSelection {
+        case .automatic:
+            let profiles = activeConnectedProfiles
+            if profiles.count > 1 {
+                return "PAD"
+            }
+            return profiles.first?.statusLabel ?? "PAD"
+        case .snes, .joyConRight:
+            return preferredProfile.statusLabel
+        }
+    }
+
+    var waitingDescription: String {
+        switch controllerSelection {
+        case .automatic:
+            return "a supported controller"
+        case .snes, .joyConRight:
+            return controllerSelection.displayName
+        }
+    }
+
+    func setControllerSelection(_ selection: ControllerSelection) {
+        guard selection != controllerSelection else { return }
+        releaseHeldButtons()
+        lastButtonValues.removeAll()
+        lastHatValues.removeAll()
+        lastActionTimes.removeAll()
+        controllerSelection = selection
+        UserDefaults.standard.set(selection.rawValue, forKey: controllerSelectionStorageKey)
+        notifyConnectionChanged()
+        delegate?.mapperDidTrigger("Controller mode: \(selection.displayName)")
     }
 
     func setAction(_ action: Action, for control: Control) {
         guard control.isConfigurable, control.choices.contains(action) else { return }
         releaseHeldButtons()
-        mappings[control] = action
-        UserDefaults.standard.set(action.rawValue, forKey: control.storageKey)
+        let profile = preferredProfile
+        mappingsByProductID[profile.productID, default: .defaultMappings(for: profile)][control] = action
+        UserDefaults.standard.set(action.rawValue, forKey: control.storageKey(productID: profile.productID))
+        if profile.productID == snesProductID {
+            UserDefaults.standard.set(action.rawValue, forKey: control.legacyStorageKey)
+        }
         delegate?.mapperMappingsChanged()
-        delegate?.mapperDidTrigger("\(control.displayName) → \(action.displayName)")
+        delegate?.mapperDidTrigger("\(displayName(for: control)) → \(action.displayName)")
     }
 
     func loadDefaultPreset() {
         releaseHeldButtons()
-        mappings = .defaultMappings
+        let profile = preferredProfile
+        mappingsByProductID[profile.productID] = .defaultMappings(for: profile)
         for control in Control.allCases where control.isConfigurable {
-            UserDefaults.standard.set(control.defaultAction.rawValue, forKey: control.storageKey)
+            let action = profile.defaultAction(for: control)
+            UserDefaults.standard.set(action.rawValue, forKey: control.storageKey(productID: profile.productID))
+            if profile.productID == snesProductID {
+                UserDefaults.standard.set(action.rawValue, forKey: control.legacyStorageKey)
+            }
         }
         lastActionTimes.removeAll()
         delegate?.mapperMappingsChanged()
@@ -378,7 +567,7 @@ private final class ControllerMapper {
         } else {
             isEnabled = true
         }
-        delegate?.mapperDidTrigger("Loaded \(defaultPresetName)")
+        delegate?.mapperDidTrigger("Loaded \(defaultPresetName) for \(profile.name)")
     }
 
     func focusChatGPT() {
@@ -400,75 +589,161 @@ private final class ControllerMapper {
     }
 
     private func loadSavedMappings() {
-        mappings = .defaultMappings
-        for control in Control.allCases where control.isConfigurable {
-            guard let rawValue = UserDefaults.standard.string(forKey: control.storageKey),
-                  let action = Action(rawValue: rawValue),
-                  control.choices.contains(action) else {
-                continue
+        mappingsByProductID.removeAll()
+        for profile in controllerProfiles.values {
+            var profileMappings = [Control: Action].defaultMappings(for: profile)
+            for control in Control.allCases where control.isConfigurable {
+                let profileKey = control.storageKey(productID: profile.productID)
+                let rawValue = UserDefaults.standard.string(forKey: profileKey)
+                    ?? (profile.productID == snesProductID
+                        ? UserDefaults.standard.string(forKey: control.legacyStorageKey)
+                        : nil)
+                guard let rawValue,
+                      let action = Action(rawValue: rawValue),
+                      control.choices.contains(action) else {
+                    continue
+                }
+                profileMappings[control] = action
             }
-            mappings[control] = action
+            mappingsByProductID[profile.productID] = profileMappings
         }
     }
 
+    private func loadControllerSelection() {
+        guard let rawValue = UserDefaults.standard.string(forKey: controllerSelectionStorageKey),
+              let selection = ControllerSelection(rawValue: rawValue) else {
+            controllerSelection = .automatic
+            return
+        }
+        controllerSelection = selection
+    }
+
     private func deviceConnected(_ device: IOHIDDevice) {
-        let product = IOHIDDeviceGetProperty(device, kIOHIDProductKey as CFString) as? String ?? "SNES Controller"
-        delegate?.mapperConnectionChanged(connected: true, product: product)
-        delegate?.mapperDidTrigger("Connected: \(product)")
+        guard let profile = controllerProfile(for: device) else { return }
+        connectedControllerCounts[profile.productID, default: 0] += 1
+        notifyConnectionChanged()
+        delegate?.mapperDidTrigger("Connected: \(profile.name)")
     }
 
     private func deviceRemoved(_ device: IOHIDDevice) {
-        let product = IOHIDDeviceGetProperty(device, kIOHIDProductKey as CFString) as? String ?? "SNES Controller"
-        delegate?.mapperConnectionChanged(connected: false, product: product)
-        delegate?.mapperDidTrigger("Disconnected: \(product)")
+        guard let profile = controllerProfile(for: device) else { return }
+        clearInputState(for: deviceIdentifier(device))
+        let remaining = max(0, connectedControllerCounts[profile.productID, default: 0] - 1)
+        connectedControllerCounts[profile.productID] = remaining
+        releaseHeldButtons()
+        notifyConnectionChanged()
+        delegate?.mapperDidTrigger("Disconnected: \(profile.name)")
+    }
+
+    private func notifyConnectionChanged() {
+        let products = activeConnectedProfiles.map(\.name)
+        delegate?.mapperConnectionChanged(
+            connected: !products.isEmpty,
+            product: products.isEmpty ? nil : products.joined(separator: " + ")
+        )
+    }
+
+    private var preferredProfile: ControllerProfile {
+        if let selectedProductID = controllerSelection.productID,
+           let selectedProfile = controllerProfiles[selectedProductID] {
+            return selectedProfile
+        }
+        if let connectedProfile = activeConnectedProfiles.first {
+            return connectedProfile
+        }
+        return snesProfile
+    }
+
+    private var activeConnectedProfiles: [ControllerProfile] {
+        controllerProfiles.values
+            .filter {
+                controllerSelection.accepts($0)
+                    && connectedControllerCounts[$0.productID, default: 0] > 0
+            }
+            .sorted { $0.productID < $1.productID }
+    }
+
+    private func controllerProfile(for device: IOHIDDevice) -> ControllerProfile? {
+        guard let productID = IOHIDDeviceGetProperty(device, kIOHIDProductIDKey as CFString) as? NSNumber else {
+            return nil
+        }
+        return controllerProfiles[productID.intValue]
+    }
+
+    private func deviceIdentifier(_ device: IOHIDDevice) -> Int {
+        if let locationID = IOHIDDeviceGetProperty(device, kIOHIDLocationIDKey as CFString) as? NSNumber {
+            return locationID.intValue
+        }
+        if let productID = IOHIDDeviceGetProperty(device, kIOHIDProductIDKey as CFString) as? NSNumber {
+            return productID.intValue
+        }
+        return 0
+    }
+
+    private func clearInputState(for deviceID: Int) {
+        lastButtonValues = lastButtonValues.filter { $0.key.deviceID != deviceID }
+        lastHatValues.removeValue(forKey: deviceID)
     }
 
     private func inputValue(_ value: IOHIDValue) {
         let element = IOHIDValueGetElement(value)
+        let device = IOHIDElementGetDevice(element)
+        guard let profile = controllerProfile(for: device) else { return }
+        guard controllerSelection.accepts(profile) else { return }
+        let deviceID = deviceIdentifier(device)
         let usagePage = IOHIDElementGetUsagePage(element)
         let usage = IOHIDElementGetUsage(element)
 
         if usagePage == kHIDPage_GenericDesktop, usage == 0x39 {
-            handleHatSwitch(IOHIDValueGetIntegerValue(value))
+            handleHatSwitch(
+                IOHIDValueGetIntegerValue(value),
+                deviceID: deviceID,
+                profile: profile
+            )
             return
         }
 
         guard usagePage == kHIDPage_Button else { return }
 
+        let inputKey = InputKey(deviceID: deviceID, usage: usage)
         let isPressed = IOHIDValueGetIntegerValue(value) != 0
-        let wasPressed = lastButtonValues[usage] ?? false
-        lastButtonValues[usage] = isPressed
+        let wasPressed = lastButtonValues[inputKey] ?? false
+        lastButtonValues[inputKey] = isPressed
 
         guard isPressed != wasPressed else { return }
 
-        if isPressed, usage == lockToggleButtonUsage {
+        if isPressed, usage == profile.lockButtonUsage {
             isEnabled.toggle()
             return
         }
 
-        guard isEnabled, let control = buttonControls[usage] else { return }
+        guard isEnabled, let control = profile.buttonControls[usage] else { return }
 
-        let action = action(for: control)
+        let action = action(for: control, profile: profile)
         guard action != .none else { return }
 
         if action.isHoldAction {
             if isPressed {
-                beginHold(button: usage, action: action)
+                beginHold(input: inputKey, action: action)
             } else {
-                endHold(button: usage)
+                endHold(input: inputKey)
             }
         } else if isPressed {
             trigger(action)
         }
     }
 
-    private func handleHatSwitch(_ rawValue: CFIndex) {
+    private func handleHatSwitch(
+        _ rawValue: CFIndex,
+        deviceID: Int,
+        profile: ControllerProfile
+    ) {
         let value = Int(rawValue)
-        guard value != lastHatValue else { return }
-        lastHatValue = value
+        guard value != lastHatValues[deviceID] else { return }
+        lastHatValues[deviceID] = value
 
-        guard isEnabled, let control = hatControls[value] else { return }
-        trigger(action(for: control))
+        guard isEnabled, let control = profile.hatControls[value] else { return }
+        trigger(action(for: control, profile: profile))
     }
 
     private func trigger(_ action: Action) {
@@ -497,6 +772,8 @@ private final class ControllerMapper {
             focusThenPost(KeyStroke(keyCode: 9, flags: [.maskControl, .maskShift]))
         case .toggleVoiceMic:
             focusThenPost(KeyStroke(keyCode: 46, flags: [.maskControl, .maskAlternate, .maskCommand]))
+        case .expandBrowserContentPanel:
+            focusThenPost(KeyStroke(keyCode: 6, flags: [.maskControl, .maskCommand]))
         case .previousChat:
             focusThenPost(KeyStroke(keyCode: 33, flags: [.maskShift, .maskCommand]))
         case .nextChat:
@@ -514,17 +791,17 @@ private final class ControllerMapper {
         }
     }
 
-    private func beginHold(button: UInt32, action: Action) {
-        guard heldButtons[button] == nil else { return }
-        heldButtons[button] = action
+    private func beginHold(input: InputKey, action: Action) {
+        guard heldButtons[input] == nil else { return }
+        heldButtons[input] = action
         delegate?.mapperDidTrigger("\(action.displayName) down")
         focusChatGPT()
         Thread.sleep(forTimeInterval: 0.08)
         postHoldAction(action, keyDown: true)
     }
 
-    private func endHold(button: UInt32) {
-        guard let action = heldButtons.removeValue(forKey: button) else { return }
+    private func endHold(input: InputKey) {
+        guard let action = heldButtons.removeValue(forKey: input) else { return }
         delegate?.mapperDidTrigger("\(action.displayName) up")
         postHoldAction(action, keyDown: false)
     }
@@ -656,6 +933,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
         menu.addItem(lastActionMenuItem)
         menu.addItem(presetMenuItem)
         menu.addItem(.separator())
+        menu.addItem(makeControllerSelectionMenuItem())
         menu.addItem(enabledMenuItem)
         menu.addItem(loadDefaultPresetItem)
         menu.addItem(makeMappingsMenuItem())
@@ -665,13 +943,37 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
         menu.addItem(.separator())
         menu.addItem(disabledItem("Current Map"))
         for control in Control.menuOrder {
-            menu.addItem(disabledItem("\(control.displayName): \(mapper.action(for: control).menuTitle)"))
+            menu.addItem(disabledItem("\(mapper.displayName(for: control)): \(mapper.action(for: control).menuTitle)"))
         }
         menu.addItem(.separator())
         menu.addItem(quitItem)
 
         statusItem.menu = menu
-        statusItem.button?.toolTip = "ChatGPT SNES Mapper"
+        statusItem.button?.toolTip = "ChatGPT Controller Mapper"
+    }
+
+    private func makeControllerSelectionMenuItem() -> NSMenuItem {
+        let item = NSMenuItem(
+            title: "Controller Mode: \(mapper.controllerSelection.displayName)",
+            action: nil,
+            keyEquivalent: ""
+        )
+        let submenu = NSMenu(title: "Controller Mode")
+
+        for selection in ControllerSelection.allCases {
+            let selectionItem = NSMenuItem(
+                title: selection.displayName,
+                action: #selector(selectControllerMode(_:)),
+                keyEquivalent: ""
+            )
+            selectionItem.target = self
+            selectionItem.representedObject = selection.rawValue
+            selectionItem.state = selection == mapper.controllerSelection ? .on : .off
+            submenu.addItem(selectionItem)
+        }
+
+        item.submenu = submenu
+        return item
     }
 
     private func makeMappingsMenuItem() -> NSMenuItem {
@@ -680,10 +982,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
 
         for control in Control.menuOrder {
             let currentAction = mapper.action(for: control)
-            let controlItem = NSMenuItem(title: "\(control.displayName): \(currentAction.menuTitle)", action: nil, keyEquivalent: "")
+            let controlName = mapper.displayName(for: control)
+            let controlItem = NSMenuItem(title: "\(controlName): \(currentAction.menuTitle)", action: nil, keyEquivalent: "")
 
             if control.isConfigurable {
-                let controlMenu = NSMenu(title: control.displayName)
+                let controlMenu = NSMenu(title: controlName)
                 for action in control.choices {
                     let actionItem = NSMenuItem(title: action.menuTitle, action: #selector(selectMapping(_:)), keyEquivalent: "")
                     actionItem.target = self
@@ -710,17 +1013,25 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
     }
 
     private func updateStatusTitle() {
+        let controllerLabel = mapper.statusLabel
+
         guard mapper.isEnabled else {
-            statusItem.button?.title = "SNES Off"
-            let product = connectedProduct ?? "waiting"
-            statusMenuItem.title = isConnected ? "Controller: \(product) (locked)" : "Controller: waiting (locked)"
+            statusItem.button?.title = "\(controllerLabel) Off"
+            if let connectedProduct, isConnected {
+                statusMenuItem.title = "Controller: \(connectedProduct) (locked)"
+            } else {
+                statusMenuItem.title = "Controller: waiting for \(mapper.waitingDescription) (locked)"
+            }
             return
         }
 
         let permissionMarker = mapper.hasKeyboardPermission ? "" : "!"
-        statusItem.button?.title = isConnected ? "SNES\(permissionMarker)" : "SNES?"
-        let product = connectedProduct ?? "waiting"
-        statusMenuItem.title = isConnected ? "Controller: \(product)" : "Controller: waiting"
+        statusItem.button?.title = isConnected ? "\(controllerLabel)\(permissionMarker)" : "PAD?"
+        if let connectedProduct, isConnected {
+            statusMenuItem.title = "Controller: \(connectedProduct)"
+        } else {
+            statusMenuItem.title = "Controller: waiting for \(mapper.waitingDescription)"
+        }
     }
 
     private func updatePermissionTitle() {
@@ -731,6 +1042,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
     func mapperConnectionChanged(connected: Bool, product: String?) {
         isConnected = connected
         connectedProduct = product
+        buildMenu()
         updateStatusTitle()
     }
 
@@ -766,6 +1078,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
         mapper.setAction(action, for: control)
     }
 
+    @objc private func selectControllerMode(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              let selection = ControllerSelection(rawValue: rawValue) else {
+            return
+        }
+        mapper.setControllerSelection(selection)
+    }
+
     @objc private func toggleEnabled() {
         mapper.isEnabled.toggle()
     }
@@ -792,6 +1112,16 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, ControllerMapp
     @objc private func quit() {
         NSApp.terminate(nil)
     }
+}
+
+if CommandLine.arguments.contains("--check-accessibility") {
+    let trusted = AXIsProcessTrusted()
+    print(trusted ? "Accessibility: allowed" : "Accessibility: blocked")
+    exit(trusted ? EXIT_SUCCESS : EXIT_FAILURE)
+}
+
+if CommandLine.arguments.contains("--print-default-mappings") {
+    printDefaultMappingsAndExit()
 }
 
 private let app = NSApplication.shared

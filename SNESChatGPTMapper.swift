@@ -3,8 +3,9 @@ import ApplicationServices
 import Foundation
 import IOKit.hid
 
-private let vendorID = 0x057E
-private let productID = 0x2017
+private let nintendoVendorID = 0x057E
+private let snesProductID = 0x2017
+private let joyConRightProductID = 0x2007
 private let chatGPTBundleID = "com.openai.codex"
 private let chatGPTPath = "/Applications/ChatGPT.app"
 private let defaultPresetName = "ChatGPT Voice Macropad"
@@ -18,6 +19,7 @@ private enum Action: String {
     case focusChatGPT = "focus ChatGPT"
     case toggleVoiceChat = "toggle Voice Chat"
     case toggleVoiceMic = "toggle Voice Chat microphone"
+    case expandBrowserContentPanel = "expand browser/content panel"
     case dictation = "dictation"
     case send = "send"
     case clearInput = "clear input"
@@ -34,21 +36,24 @@ private struct KeyStroke {
     let flags: CGEventFlags
 }
 
-private final class Mapper {
-    private let mode: Mode
-    private let manager: IOHIDManager
-    private var lastButtonValues: [UInt32: Bool] = [:]
-    private var lastHatValue = 8
-    private var heldButtons: Set<UInt32> = []
-    private var lastActionTimes: [Action: Date] = [:]
-    private var statusSound: NSSound?
-    private let actionCooldown: TimeInterval = 0.18
-    private var isEnabled = true
-    private let lockToggleButtonUsage: UInt32 = 16
+private struct InputKey: Hashable {
+    let deviceID: Int
+    let usage: UInt32
+}
 
-    // Calibrated on this macOS host:
-    // B=1, A=2, Y=3, X=4, L=5, R=6, ZL=7, Select=9, Start=10, ZR=16.
-    private let buttonActions: [UInt32: Action] = [
+private struct ControllerProfile {
+    let productID: Int
+    let name: String
+    let buttonActions: [UInt32: Action]
+    let heldButtonStrokes: [UInt32: KeyStroke]
+    let lockButtonUsage: UInt32
+    let hatActions: [Int: Action]
+}
+
+private let snesProfile = ControllerProfile(
+    productID: snesProductID,
+    name: "Nintendo SNES Controller",
+    buttonActions: [
         1: .send,            // B
         3: .clearInput,      // Y
         4: .toggleVoiceChat, // X
@@ -57,10 +62,78 @@ private final class Mapper {
         7: .newChat,         // ZL
         9: .focusChatGPT,    // Select / Back
         10: .focusChatGPT    // Start
+    ],
+    heldButtonStrokes: [
+        2: KeyStroke(keyCode: 2, flags: [.maskControl, .maskShift]) // A
+    ],
+    lockButtonUsage: 16, // ZR
+    hatActions: [
+        0: .previousChat,
+        2: .toggleSidePanel,
+        4: .nextChat,
+        6: .toggleSidebar
     ]
-    private let heldButtonStrokes: [UInt32: KeyStroke] = [
-        2: KeyStroke(keyCode: 2, flags: [.maskControl, .maskShift]) // A: hold ChatGPT dictation
+)
+
+// Hardware-calibrated on a Nintendo Switch Joy-Con (R) connected over
+// Bluetooth to macOS. The Joy-Con's vertical stick orientation rotates the
+// hat values 90 degrees from the SNES controller.
+private let joyConRightProfile = ControllerProfile(
+    productID: joyConRightProductID,
+    name: "Nintendo Switch Joy-Con (R)",
+    buttonActions: [
+        3: .send,            // B
+        2: .toggleVoiceChat, // X
+        4: .clearInput,      // Y
+        5: .toggleVoiceMic,  // SL
+        6: .expandBrowserContentPanel, // SR
+        15: .toggleVoiceMic,            // R
+        10: .newChat,                   // +
+        13: .focusChatGPT    // Home
+    ],
+    heldButtonStrokes: [
+        1: KeyStroke(keyCode: 2, flags: [.maskControl, .maskShift]) // A
+    ],
+    lockButtonUsage: 16, // ZR
+    hatActions: [
+        2: .previousChat,
+        4: .toggleSidePanel,
+        6: .nextChat,
+        0: .toggleSidebar
     ]
+)
+
+private let controllerProfiles: [Int: ControllerProfile] = [
+    snesProfile.productID: snesProfile,
+    joyConRightProfile.productID: joyConRightProfile
+]
+
+private func printDefaultMappingsAndExit() -> Never {
+    for profile in controllerProfiles.values.sorted(by: { $0.productID < $1.productID }) {
+        for (usage, action) in profile.buttonActions.sorted(by: { $0.key < $1.key }) {
+            print("\(profile.productID).button.\(usage)=\(action.rawValue)")
+        }
+        for usage in profile.heldButtonStrokes.keys.sorted() {
+            print("\(profile.productID).button.\(usage)=hold dictation")
+        }
+        print("\(profile.productID).button.\(profile.lockButtonUsage)=lock/unlock mapper")
+        for (value, action) in profile.hatActions.sorted(by: { $0.key < $1.key }) {
+            print("\(profile.productID).hat.\(value)=\(action.rawValue)")
+        }
+    }
+    exit(EXIT_SUCCESS)
+}
+
+private final class Mapper {
+    private let mode: Mode
+    private let manager: IOHIDManager
+    private var lastButtonValues: [InputKey: Bool] = [:]
+    private var lastHatValues: [Int: Int] = [:]
+    private var heldButtons: [InputKey: KeyStroke] = [:]
+    private var lastActionTimes: [Action: Date] = [:]
+    private var statusSound: NSSound?
+    private let actionCooldown: TimeInterval = 0.18
+    private var isEnabled = true
 
     init(mode: Mode) {
         self.mode = mode
@@ -68,12 +141,15 @@ private final class Mapper {
     }
 
     func run() {
-        let matching: [String: Any] = [
-            kIOHIDVendorIDKey as String: vendorID,
-            kIOHIDProductIDKey as String: productID
-        ]
+        let productIDs = controllerProfiles.keys.sorted()
+        let matching = productIDs.map { productID in
+            [
+                kIOHIDVendorIDKey as String: nintendoVendorID,
+                kIOHIDProductIDKey as String: productID
+            ]
+        }
 
-        IOHIDManagerSetDeviceMatching(manager, matching as CFDictionary)
+        IOHIDManagerSetDeviceMatchingMultiple(manager, matching as CFArray)
 
         let context = Unmanaged.passUnretained(self).toOpaque()
         IOHIDManagerRegisterDeviceMatchingCallback(manager, { context, _, _, device in
@@ -106,8 +182,9 @@ private final class Mapper {
             ] as CFDictionary)
         }
 
-        print("SNES ChatGPT mapper running.")
-        print("Device: Nintendo SNES Controller \(String(format: "0x%04X", vendorID)):\(String(format: "0x%04X", productID))")
+        print("ChatGPT controller mapper running.")
+        print("SNES Controller: \(String(format: "0x%04X", nintendoVendorID)):\(String(format: "0x%04X", snesProductID))")
+        print("Joy-Con (R): \(String(format: "0x%04X", nintendoVendorID)):\(String(format: "0x%04X", joyConRightProductID))")
         switch mode {
         case .normal:
             print("Start/Select: focus ChatGPT")
@@ -122,7 +199,7 @@ private final class Mapper {
             print("Y: clear input")
             print("B: send message")
         case .monitor:
-            print("Monitor mode. Press SNES buttons; this will print IOHID usages.")
+            print("Monitor mode. Press SNES or Joy-Con controls; this will print input events.")
         }
         fflush(stdout)
 
@@ -137,46 +214,52 @@ private final class Mapper {
 
     private func deviceRemoved(_ device: IOHIDDevice) {
         let product = IOHIDDeviceGetProperty(device, kIOHIDProductKey as CFString) as? String ?? "Unknown"
+        clearInputState(for: deviceIdentifier(device))
+        releaseHeldButtons()
         print("Removed: \(product)")
         fflush(stdout)
     }
 
     private func inputValue(_ value: IOHIDValue) {
         let element = IOHIDValueGetElement(value)
+        let device = IOHIDElementGetDevice(element)
+        guard let profile = controllerProfile(for: device) else { return }
+        let deviceID = deviceIdentifier(device)
         let usagePage = IOHIDElementGetUsagePage(element)
         let usage = IOHIDElementGetUsage(element)
         let integerValue = IOHIDValueGetIntegerValue(value)
 
         if usagePage == kHIDPage_GenericDesktop, usage == 0x39 {
             if mode == .monitor {
-                print("hat value=\(integerValue)")
+                print("\(profile.name) hat value=\(integerValue)")
                 fflush(stdout)
             } else {
-                handleHatSwitch(integerValue)
+                handleHatSwitch(integerValue, deviceID: deviceID, profile: profile)
             }
             return
         }
 
         if usagePage == kHIDPage_Button {
+            let inputKey = InputKey(deviceID: deviceID, usage: usage)
             let isPressed = integerValue != 0
-            let wasPressed = lastButtonValues[usage] ?? false
-            lastButtonValues[usage] = isPressed
+            let wasPressed = lastButtonValues[inputKey] ?? false
+            lastButtonValues[inputKey] = isPressed
 
             if isPressed != wasPressed {
                 if mode == .monitor {
-                    print("button usage=\(usage) \(isPressed ? "down" : "up")")
+                    print("\(profile.name) button usage=\(usage) \(isPressed ? "down" : "up")")
                     fflush(stdout)
-                } else if isPressed, usage == lockToggleButtonUsage {
+                } else if isPressed, usage == profile.lockButtonUsage {
                     toggleEnabled()
                 } else if !isEnabled {
                     return
-                } else if let stroke = heldButtonStrokes[usage] {
+                } else if let stroke = profile.heldButtonStrokes[usage] {
                     if isPressed {
-                        beginHold(button: usage, stroke: stroke)
+                        beginHold(input: inputKey, stroke: stroke)
                     } else {
-                        endHold(button: usage, stroke: stroke)
+                        endHold(input: inputKey, stroke: stroke)
                     }
-                } else if isPressed, let action = buttonActions[usage] {
+                } else if isPressed, let action = profile.buttonActions[usage] {
                     trigger(action)
                 }
             }
@@ -189,24 +272,38 @@ private final class Mapper {
         }
     }
 
-    private func handleHatSwitch(_ rawValue: CFIndex) {
-        let value = Int(rawValue)
-        guard value != lastHatValue else { return }
-        lastHatValue = value
-        guard isEnabled else { return }
-
-        switch value {
-        case 0:
-            trigger(.previousChat)
-        case 2:
-            trigger(.toggleSidePanel)
-        case 4:
-            trigger(.nextChat)
-        case 6:
-            trigger(.toggleSidebar)
-        default:
-            break
+    private func controllerProfile(for device: IOHIDDevice) -> ControllerProfile? {
+        guard let productID = IOHIDDeviceGetProperty(device, kIOHIDProductIDKey as CFString) as? NSNumber else {
+            return nil
         }
+        return controllerProfiles[productID.intValue]
+    }
+
+    private func deviceIdentifier(_ device: IOHIDDevice) -> Int {
+        if let locationID = IOHIDDeviceGetProperty(device, kIOHIDLocationIDKey as CFString) as? NSNumber {
+            return locationID.intValue
+        }
+        if let productID = IOHIDDeviceGetProperty(device, kIOHIDProductIDKey as CFString) as? NSNumber {
+            return productID.intValue
+        }
+        return 0
+    }
+
+    private func clearInputState(for deviceID: Int) {
+        lastButtonValues = lastButtonValues.filter { $0.key.deviceID != deviceID }
+        lastHatValues.removeValue(forKey: deviceID)
+    }
+
+    private func handleHatSwitch(
+        _ rawValue: CFIndex,
+        deviceID: Int,
+        profile: ControllerProfile
+    ) {
+        let value = Int(rawValue)
+        guard value != lastHatValues[deviceID] else { return }
+        lastHatValues[deviceID] = value
+        guard isEnabled, let action = profile.hatActions[value] else { return }
+        trigger(action)
     }
 
     private func trigger(_ action: Action) {
@@ -229,6 +326,9 @@ private final class Mapper {
             // Assign this in ChatGPT Keyboard Shortcuts to:
             // Toggle Voice Chat microphone = Control + Option + Command + M
             focusThenPost(KeyStroke(keyCode: 46, flags: [.maskControl, .maskAlternate, .maskCommand]))
+        case .expandBrowserContentPanel:
+            // Ryan's custom shortcut for expanding the browser/content panel.
+            focusThenPost(KeyStroke(keyCode: 6, flags: [.maskControl, .maskCommand]))
         case .dictation:
             focusThenPost(KeyStroke(keyCode: 2, flags: [.maskControl, .maskShift]))
         case .send:
@@ -250,9 +350,9 @@ private final class Mapper {
         }
     }
 
-    private func beginHold(button: UInt32, stroke: KeyStroke) {
-        guard !heldButtons.contains(button) else { return }
-        heldButtons.insert(button)
+    private func beginHold(input: InputKey, stroke: KeyStroke) {
+        guard heldButtons[input] == nil else { return }
+        heldButtons[input] = stroke
         print("Action: hold dictation down")
         fflush(stdout)
         focusChatGPT()
@@ -260,9 +360,8 @@ private final class Mapper {
         postKeyDown(stroke)
     }
 
-    private func endHold(button: UInt32, stroke: KeyStroke) {
-        guard heldButtons.contains(button) else { return }
-        heldButtons.remove(button)
+    private func endHold(input: InputKey, stroke: KeyStroke) {
+        guard heldButtons.removeValue(forKey: input) != nil else { return }
         print("Action: hold dictation up")
         fflush(stdout)
         postKeyUp(stroke)
@@ -279,10 +378,8 @@ private final class Mapper {
     }
 
     private func releaseHeldButtons() {
-        for button in heldButtons {
-            if let stroke = heldButtonStrokes[button] {
-                postKeyUp(stroke)
-            }
+        for stroke in heldButtons.values {
+            postKeyUp(stroke)
         }
         heldButtons.removeAll()
     }
@@ -357,8 +454,10 @@ private final class Mapper {
 private func printUsageAndExit() -> Never {
     print("""
     Usage:
-      chatgpt-snes-mapper             Run the ChatGPT SNES controller mapper
-      chatgpt-snes-mapper --monitor   Print raw controller button usages
+      chatgpt-snes-mapper             Run the ChatGPT controller mapper
+      chatgpt-snes-mapper --monitor   Print SNES and Joy-Con input events
+      chatgpt-snes-mapper --print-default-mappings
+                                      Print defaults without opening a HID device
 
     Default map:
       Start / Select -> focus ChatGPT
@@ -374,6 +473,21 @@ private func printUsageAndExit() -> Never {
       A              -> hold Control + Shift + D
       B              -> Return
 
+    Joy-Con map:
+      +             -> Command + N
+      Home          -> focus ChatGPT
+      A             -> hold Control + Shift + D
+      B             -> Return
+      X             -> Control + Shift + V
+      Y             -> Command + A, Delete
+      SL            -> Control + Option + Command + M
+      SR            -> Control + Command + Z
+      R             -> Control + Option + Command + M
+      ZR            -> lock/unlock mapper
+      Stick Up/Down -> previous/next chat
+      Stick Left    -> Command + B
+      Stick Right   -> Option + Command + B
+
     Default preset: \(defaultPresetName)
     """)
     exit(0)
@@ -386,6 +500,8 @@ if args.isEmpty {
     mode = .normal
 } else if args.count == 1, args.first == "--monitor" {
     mode = .monitor
+} else if args.count == 1, args.first == "--print-default-mappings" {
+    printDefaultMappingsAndExit()
 } else if args.count == 1, ["--help", "-h"].contains(args.first!) {
     printUsageAndExit()
 } else {

@@ -38,4 +38,4 @@ launchctl bootstrap "gui/$(id -u)" "$PLIST_PATH" >/dev/null 2>&1 || true
 launchctl kickstart -k "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || open -g "$APP_BUNDLE_PATH"
 
 echo "Installed LaunchAgent: $PLIST_PATH"
-echo "If the menu bar shows SNES!, enable ChatGPTSNESMapper.app in System Settings > Privacy & Security > Accessibility."
+echo "If the menu bar shows SNES! or JOY!, enable the app in System Settings > Privacy & Security > Accessibility."
